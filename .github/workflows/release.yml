@@ -86,7 +86,7 @@ jobs:
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             cp target/${{ matrix.target }}/release/tunnel-client${{ matrix.extension }} release-assets/
             cd release-assets
-            zip tunnel-client-${{ matrix.name }}.zip tunnel-client${{ matrix.extension }}
+            powershell -Command "Compress-Archive -Path 'tunnel-client${{ matrix.extension }}' -DestinationPath 'tunnel-client-${{ matrix.name }}.zip'"
           else
             cp target/${{ matrix.target }}/release/tunnel-client release-assets/
             cd release-assets
