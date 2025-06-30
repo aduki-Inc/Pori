@@ -6,7 +6,7 @@
 set -e
 
 # Configuration
-REPO="aduki-Inc/Proxy"
+REPO="aduki-Inc/Pori"
 BINARY_NAME="pori"
 INSTALL_DIR="/usr/local/bin"
 TMP_DIR="/tmp/pori-install"
@@ -55,7 +55,7 @@ EXAMPLES:
     ./install.sh
 
     # Install specific version
-    ./install.sh --version v1.0.0
+    ./install.sh --version v0.1.2
 
     # Install to custom directory
     ./install.sh --dir ~/.local/bin
@@ -324,7 +324,7 @@ EOF
 
 # Main execution
 main() {
-    print_info "Tunnel Client Installation Script"
+    print_info "Pori Installation Script"
     print_info "Repository: https://github.com/$REPO"
     echo
     

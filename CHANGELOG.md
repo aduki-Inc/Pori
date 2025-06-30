@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Improved release documentation and scripts
+- Updated repository references to new GitHub location
+
 ## [0.1.2] - 2025-06-30
 
 ### Added
@@ -24,16 +29,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Renamed application from "tunnel-client" to "pori" (meaning wild, open)
-- Updated all environment variables from TUNNEL_* to PORI_* prefix
+- Updated all environment variables from `TUNNEL_*` to `PORI_*` prefix
 - Made --url and --token optional when using configuration files
 - Updated binary name from tunnel-client to pori
 - Updated installation for global access like ngrok
 - Updated dashboard default port to 7616
+- Updated dependencies: dirs 5.0.1 → 6.0.0 and related transitive dependencies
 
 ### Fixed
 
 - Configuration file loading with proper error handling
 - Test suite compatibility with new CLI structure
+- Clippy warnings: replaced `map_or` with `is_some_and` for better readability
+- Clippy warnings: use `strip_prefix` instead of manual string slicing for safety
+- Code formatting compliance for CI/CD pipeline
+
+### Security
+
+- Updated to latest dependency versions with security patches
+- All dependencies now up-to-date (dirs, windows-sys, redox_users, etc.)
 
 ## [0.1.0] - 2025-06-30
 
