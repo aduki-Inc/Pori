@@ -1,14 +1,16 @@
 # Release Management
 
-This directory contains scripts and tools for managing releases of the tunnel-client.
+This directory contains scripts and tools for managing releases of Pori.
 
-## Files
+## Fil3. Move the binary to a directory in your PATH
+
+4. Make it executable (Linux/macOS): `chmod +x pori`
 
 ### Installation Script
 
-**`install.sh`** - Cross-platform installation script for end users
+**`install.sh`** - Installation script for end users
 
-Downloads and installs the latest (or specified) release of tunnel-client from GitHub releases.
+Downloads and installs the latest (or specified) release of Pori from GitHub releases.
 
 #### Usage
 
@@ -33,11 +35,11 @@ curl -fsSL https://raw.githubusercontent.com/aduki-Inc/Proxy/main/release/instal
 - Configurable installation directory
 - Version verification
 - Force reinstall option
-- Comprehensive error handling
+- Error handling
 
 ### Release Preparation Script
 
-**`prepare.sh`** - Automated release preparation for maintainers
+**`prepare.sh`** - Release preparation for maintainers
 
 Prepares a new release by updating version numbers, running tests, building binaries, and creating git tags.
 
@@ -81,7 +83,7 @@ Prepares a new release by updating version numbers, running tests, building bina
    git push origin v1.0.0
    ```
 
-4. **Monitor GitHub Actions** - The release workflow will automatically:
+4. **Monitor GitHub Actions** - The release workflow will:
    - Build binaries for all supported platforms
    - Create GitHub release with download links
    - Upload release artifacts
@@ -101,18 +103,18 @@ curl -fsSL https://raw.githubusercontent.com/aduki-Inc/Proxy/main/release/instal
 2. Download the appropriate binary for your platform
 3. Extract the archive
 4. Move the binary to a directory in your PATH
-5. Make it executable (Linux/macOS): `chmod +x tunnel-client`
+5. Make it executable (Linux/macOS): `chmod +x pori`
 
 #### Supported Platforms
 
 | Platform | Architecture | Package |
 |----------|--------------|---------|
-| Linux | x86_64 | `tunnel-client-linux-x86_64.tar.gz` |
-| Linux | x86_64 (static) | `tunnel-client-linux-x86_64-musl.tar.gz` |
-| Linux | ARM64 | `tunnel-client-linux-aarch64.tar.gz` |
-| macOS | Intel | `tunnel-client-darwin-x86_64.tar.gz` |
-| macOS | Apple Silicon | `tunnel-client-darwin-aarch64.tar.gz` |
-| Windows | x86_64 | `tunnel-client-windows-x86_64.zip` |
+| Linux | x86_64 | `pori-linux-x86_64.tar.gz` |
+| Linux | x86_64 (static) | `pori-linux-x86_64-musl.tar.gz` |
+| Linux | ARM64 | `pori-linux-aarch64.tar.gz` |
+| macOS | Intel | `pori-darwin-x86_64.tar.gz` |
+| macOS | Apple Silicon | `pori-darwin-aarch64.tar.gz` |
+| Windows | x86_64 | `pori-windows-x86_64.zip` |
 
 ## GitHub Actions Workflow
 
@@ -159,9 +161,9 @@ The installation script:
 
 - Downloads only from official GitHub releases
 - Verifies binary integrity where possible
-- Uses secure HTTPS connections
+- Uses HTTPS connections
 - Provides dry-run mode for inspection
-- Includes comprehensive error handling
+- Includes error handling
 
 ## Troubleshooting
 
@@ -192,4 +194,4 @@ The installation script:
 
 - Check the main project README
 - Review GitHub Issues for known problems
-- Create a new issue with detailed error information
+- Create a new issue with error information

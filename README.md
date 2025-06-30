@@ -1,32 +1,32 @@
-# Tunnel Client
+# Pori
 
-A high-performance tunnel client built in Rust that creates secure connections between local services and remote proxy servers through WebSocket tunnels.
+A proxy client built in Rust that creates connections between local services and remote proxy servers through WebSocket tunnels. "Pori" means wild, open.
 
 ## Overview
 
-The tunnel client establishes and maintains persistent WebSocket connections to proxy servers, forwarding HTTP requests to local services while providing real-time monitoring through an integrated dashboard. It handles connection failures gracefully with automatic reconnection and exponential backoff strategies.
+Pori establishes and maintains WebSocket connections to proxy servers, forwarding HTTP requests to local services while providing monitoring through a dashboard. It handles connection failures with automatic reconnection and exponential backoff strategies.
 
 ## Features
 
 ### Core Functionality
 
-- **WebSocket Tunneling**: Secure, persistent connections to remote proxy servers
-- **HTTP Request Forwarding**: Efficient proxying of incoming requests to local services
-- **Automatic Reconnection**: Robust connection management with configurable retry policies
-- **Real-time Dashboard**: Web-based monitoring interface with live statistics
-- **Configuration Management**: Flexible configuration via CLI arguments, environment variables, or configuration files
+- **WebSocket Tunneling**: Persistent connections to remote proxy servers
+- **HTTP Request Forwarding**: Proxying of incoming requests to local services
+- **Automatic Reconnection**: Connection management with configurable retry policies
+- **Dashboard**: Web-based monitoring interface with statistics
+- **Configuration Management**: Configuration via CLI arguments, environment variables, or configuration files
 
 ### Performance & Reliability
 
-- **Asynchronous Architecture**: Built on Tokio for high-concurrency scenarios
-- **Connection Pooling**: Efficient connection reuse for local server communication
+- **Asynchronous Architecture**: Built on Tokio for concurrent scenarios
+- **Connection Pooling**: Connection reuse for local server communication
 - **Resource Management**: Configurable connection limits and timeouts
-- **Error Handling**: Comprehensive error recovery and logging
-- **Signal Handling**: Graceful shutdown on system signals
+- **Error Handling**: Error recovery and logging
+- **Signal Handling**: Shutdown on system signals
 
 ### Security
 
-- **TLS/SSL Support**: Secure connections with certificate validation options
+- **TLS/SSL Support**: Connections with certificate validation options
 - **Token Authentication**: Configurable authentication for proxy connections
 - **Request Validation**: Input sanitization and validation
 
@@ -34,12 +34,12 @@ The tunnel client establishes and maintains persistent WebSocket connections to 
 
 ### Pre-built Binaries
 
-Download the latest release for your platform from the [Releases](https://github.com/your-org/tunnel-client/releases) page.
+Download the latest release for your platform from the [Releases](https://github.com/aduki-Inc/Proxy/releases) page.
 
 For Linux systems, use the installation script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-org/tunnel-client/main/release/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/aduki-Inc/Proxy/main/release/install.sh | bash
 ```
 
 ### Building from Source
@@ -50,45 +50,45 @@ Requirements:
 - Cargo (included with Rust)
 
 ```bash
-git clone https://github.com/your-org/tunnel-client.git
-cd tunnel-client
+git clone https://github.com/aduki-Inc/Proxy.git
+cd Proxy
 cargo build --release
 ```
 
-The compiled binary will be available at `target/release/tunnel-client`.
+The compiled binary will be available at `target/release/pori`.
 
 ## Usage
 
 ### Basic Usage
 
 ```bash
-tunnel-client --url wss://proxy.example.com --token your-auth-token
+pori --url wss://proxy.example.com --token your-auth-token
 ```
 
 ### Advanced Usage Examples
 
 ```bash
 # Connect to HTTPS local service on custom port
-tunnel-client --url wss://proxy.example.com --token your-token --protocol https --port 8443
+pori --url wss://proxy.example.com --token your-token --protocol https --port 8443
 
 # Use HTTP with custom port and disable dashboard
-tunnel-client --url wss://proxy.example.com --token your-token --protocol http --port 8080 --no-dashboard
+pori --url wss://proxy.example.com --token your-token --protocol http --port 7616 --no-dashboard
 
 # With custom dashboard port and debug logging
-tunnel-client --url wss://proxy.example.com --token your-token --dashboard-port 9090 --log-level debug
+pori --url wss://proxy.example.com --token your-token --dashboard-port 9090 --log-level debug
 ```
 
 ### Configuration Options
 
 ```bash
-tunnel-client [OPTIONS] --url <URL> --token <TOKEN>
+pori [OPTIONS] --url <URL> --token <TOKEN>
 
 Options:
       --url <URL>                    WebSocket URL for cloud/proxy connection
       --token <TOKEN>                Access token for authentication
       --protocol <PROTOCOL>          Protocol for local server (http or https) [default: http]
       --port <PORT>                  Port for local server [default: 3000]
-      --dashboard-port <PORT>        Dashboard server port [default: 8080]
+      --dashboard-port <PORT>        Dashboard server port [default: 7616]
       --log-level <LEVEL>            Log level [default: info]
       --config <CONFIG>              Configuration file path
       --no-dashboard                 Disable dashboard server
@@ -104,13 +104,13 @@ Options:
 
 All command-line options can be configured via environment variables:
 
-- `TUNNEL_URL`: WebSocket URL
-- `TUNNEL_TOKEN`: Authentication token
-- `TUNNEL_PROTOCOL`: Local server protocol (http or https)
-- `TUNNEL_PORT`: Local server port
-- `TUNNEL_DASHBOARD_PORT`: Dashboard port
+- `PORI_URL`: WebSocket URL
+- `PORI_TOKEN`: Authentication token
+- `PORI_PROTOCOL`: Local server protocol (http or https)
+- `PORI_PORT`: Local server port
+- `PORI_DASHBOARD_PORT`: Dashboard port
 - `RUST_LOG`: Log level
-- `TUNNEL_CONFIG`: Configuration file path
+- `PORI_CONFIG`: Configuration file path
 
 ### Configuration File
 
@@ -124,14 +124,14 @@ timeout = 30
 max_reconnects = 0
 
 [local_server]
-url = "http://localhost:8080"
+url = "http://localhost:7616"
 verify_ssl = false
 timeout = 30
 max_connections = 10
 
 [dashboard]
 enabled = true
-port = 8080
+port = 7616
 
 [logging]
 level = "info"
@@ -140,12 +140,12 @@ level = "info"
 Use the configuration file:
 
 ```bash
-tunnel-client --config config.toml
+pori --config config.toml
 ```
 
 ## Dashboard
 
-The integrated dashboard provides real-time monitoring at `http://localhost:8080` (or your configured port):
+The dashboard provides monitoring at `http://localhost:7616` (or your configured port):
 
 - **Connection Status**: Current WebSocket connection state
 - **Request Statistics**: Processed, successful, and failed request counts
@@ -166,10 +166,10 @@ The integrated dashboard provides real-time monitoring at `http://localhost:8080
 ### Request Flow
 
 1. Proxy server sends HTTP request via WebSocket
-2. Tunnel client receives and validates the request
+2. Pori receives and validates the request
 3. Request is forwarded to the configured local service
 4. Response is captured and sent back through the WebSocket
-5. Statistics and logs are updated in real-time
+5. Statistics and logs are updated
 
 ## Development
 
@@ -275,7 +275,7 @@ For questions, bug reports, or feature requests:
 Enable debug logging for troubleshooting:
 
 ```bash
-RUST_LOG=debug tunnel-client --url wss://proxy.example.com --token your-token
+RUST_LOG=debug pori --url wss://proxy.example.com --token your-token
 ```
 
 ### Performance Tuning

@@ -188,11 +188,11 @@ criterion = "0.5"
 
 ```toml
 [package]
-name = "tunnel-client"
+name = "pori"
 version = "0.1.0"
 edition = "2021"
 authors = ["Your Name <email@example.com>"]
-description = "High-performance tunnel client with dashboard"
+description = "Pori - wild, open proxy client with dashboard"
 license = "MIT"
 repository = "https://github.com/username/tunnel-client"
 

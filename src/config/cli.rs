@@ -7,23 +7,23 @@ use url::Url;
 #[command(author, version, about, long_about = None)]
 pub struct CliArgs {
     /// WebSocket URL for cloud/proxy connection
-    #[arg(long, env = "TUNNEL_URL")]
+    #[arg(long, env = "PORI_URL")]
     pub url: Url,
 
     /// Access token for authentication
-    #[arg(long, env = "TUNNEL_TOKEN")]
+    #[arg(long, env = "PORI_TOKEN")]
     pub token: String,
 
     /// Protocol for local server (http or https)
-    #[arg(long, default_value = "http", env = "TUNNEL_PROTOCOL")]
+    #[arg(long, default_value = "http", env = "PORI_PROTOCOL")]
     pub protocol: String,
 
     /// Port for local server
-    #[arg(long, default_value_t = 3000, env = "TUNNEL_PORT")]
+    #[arg(long, default_value_t = 3000, env = "PORI_PORT")]
     pub port: u16,
 
     /// Port for dashboard server
-    #[arg(long, default_value_t = 8080, env = "TUNNEL_DASHBOARD_PORT")]
+    #[arg(long, default_value_t = 7616, env = "PORI_DASHBOARD_PORT")]
     pub dashboard_port: u16,
 
     /// Log level (error, warn, info, debug, trace)
@@ -31,7 +31,7 @@ pub struct CliArgs {
     pub log_level: String,
 
     /// Configuration file path (optional)
-    #[arg(long, env = "TUNNEL_CONFIG")]
+    #[arg(long, env = "PORI_CONFIG")]
     pub config: Option<String>,
 
     /// Disable dashboard server

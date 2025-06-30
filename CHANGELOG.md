@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial release of tunnel-client
+- Initial release of Pori
 - Core WebSocket tunneling functionality
 - HTTP proxy forwarding capabilities
 - Dashboard server with monitoring interface

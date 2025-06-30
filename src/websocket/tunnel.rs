@@ -334,11 +334,11 @@ mod tests {
         // This would need proper initialization in actual tests
         // For now, we'll create a minimal mock
         let args = CliArgs {
-            url: "ws://localhost:8080".parse().unwrap(),
+            url: "ws://localhost:7616".parse().unwrap(),
             token: "test-token".to_string(),
             protocol: "http".to_string(),
             port: 3000,
-            dashboard_port: 8080,
+            dashboard_port: 7616,
             log_level: "info".to_string(),
             config: None,
             no_dashboard: false,

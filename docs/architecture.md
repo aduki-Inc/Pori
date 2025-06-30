@@ -4,7 +4,7 @@
 
 ### Component Overview
 
-The Rust tunnel client consists of several key components working together:
+The Rust tunnel client consists of several kepori --url wss://proxy.example.com --token abc123 --local https://localhost:3000 --dashboard-port 8080 components working together:
 
 1. **Dashboard HTTP Server (hyper.rs)** - Serves the local dashboard interface
 2. **WebSocket Client** - Connects to cloud/proxy servers for bidirectional communication
@@ -147,7 +147,7 @@ src/
 **Command-line Interface**:
 
 ```bash
-tunnel-client --url wss://proxy.example.com --token abc123 --local https://localhost:3000 --dashboard-port 8080
+tunnel-client --url wss://proxy.example.com --token abc123 --local https://localhost:3000 --dashboard-port 7616
 ```
 
 ### Message Router

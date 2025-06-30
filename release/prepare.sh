@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Prepare script for tunnel-client releases
+# Prepare script for Pori releases
 
 set -e
 
@@ -17,11 +17,11 @@ print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Configuration
-PACKAGE_NAME="tunnel-client"
+PACKAGE_NAME="pori"
 
 show_help() {
     cat << EOF
-Prepare Script for Tunnel Client Releases
+Prepare Script for Pori Releases
 
 USAGE:
     prepare.sh [OPTIONS] <VERSION>

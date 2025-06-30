@@ -273,12 +273,7 @@ impl AppSettings {
     /// Try to load default configuration files
     fn try_load_default_config() -> Result<ConfigFile> {
         // Try common config file locations
-        let possible_paths = [
-            "./tunnel-client.toml",
-            "./tunnel-client.json",
-            "~/.tunnel-client.toml",
-            "~/.tunnel-client.json",
-        ];
+        let possible_paths = ["./pori.toml", "./pori.json", "~/.pori.toml", "~/.pori.json"];
 
         for path in &possible_paths {
             if let Ok(config) = Self::load_config_file(path) {

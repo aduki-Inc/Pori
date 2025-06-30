@@ -84,20 +84,20 @@ jobs:
         run: |
           mkdir -p release-assets
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp target/${{ matrix.target }}/release/tunnel-client${{ matrix.extension }} release-assets/
+            cp target/${{ matrix.target }}/release/pori${{ matrix.extension }} release-assets/
             cd release-assets
-            powershell -Command "Compress-Archive -Path 'tunnel-client${{ matrix.extension }}' -DestinationPath 'tunnel-client-${{ matrix.name }}.zip'"
+            powershell -Command "Compress-Archive -Path 'pori${{ matrix.extension }}' -DestinationPath 'pori-${{ matrix.name }}.zip'"
           else
-            cp target/${{ matrix.target }}/release/tunnel-client release-assets/
+            cp target/${{ matrix.target }}/release/pori release-assets/
             cd release-assets
-            tar -czf tunnel-client-${{ matrix.name }}.tar.gz tunnel-client
+            tar -czf pori-${{ matrix.name }}.tar.gz pori
           fi
 
       - name: Upload release asset
         uses: actions/upload-artifact@v4
         with:
-          name: tunnel-client-${{ matrix.name }}
-          path: release-assets/tunnel-client-${{ matrix.name }}.*
+          name: pori-${{ matrix.name }}
+          path: release-assets/pori-${{ matrix.name }}.*
 
   release:
     name: Create Release
@@ -147,12 +147,12 @@ jobs:
 
             | Platform | Architecture | Download |
             |----------|--------------|----------|
-            | Linux | x86_64 | [tunnel-client-linux-x86_64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/tunnel-client-linux-x86_64.tar.gz) |
-            | Linux | x86_64 (musl) | [tunnel-client-linux-x86_64-musl.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/tunnel-client-linux-x86_64-musl.tar.gz) |
-            | Linux | ARM64 | [tunnel-client-linux-aarch64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/tunnel-client-linux-aarch64.tar.gz) |
-            | macOS | x86_64 | [tunnel-client-darwin-x86_64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/tunnel-client-darwin-x86_64.tar.gz) |
-            | macOS | ARM64 | [tunnel-client-darwin-aarch64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/tunnel-client-darwin-aarch64.tar.gz) |
-            | Windows | x86_64 | [tunnel-client-windows-x86_64.zip](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/tunnel-client-windows-x86_64.zip) |
+            | Linux | x86_64 | [pori-linux-x86_64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/pori-linux-x86_64.tar.gz) |
+            | Linux | x86_64 (musl) | [pori-linux-x86_64-musl.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/pori-linux-x86_64-musl.tar.gz) |
+            | Linux | ARM64 | [pori-linux-aarch64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/pori-linux-aarch64.tar.gz) |
+            | macOS | x86_64 | [pori-darwin-x86_64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/pori-darwin-x86_64.tar.gz) |
+            | macOS | ARM64 | [pori-darwin-aarch64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/pori-darwin-aarch64.tar.gz) |
+            | Windows | x86_64 | [pori-windows-x86_64.zip](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/pori-windows-x86_64.zip) |
 
             ## Installation
 
@@ -165,7 +165,7 @@ jobs:
             1. Download the appropriate binary for your platform
             2. Extract the archive
             3. Move the binary to a directory in your PATH
-            4. Make it executable (Linux/macOS): `chmod +x tunnel-client`
+            4. Make it executable (Linux/macOS): `chmod +x pori`
 
             ## Verification
 

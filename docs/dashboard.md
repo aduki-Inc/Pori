@@ -125,7 +125,7 @@ Local HTTP server built with hyper.rs that provides:
 
 **Default configuration:**
 - Listen on 127.0.0.1 (localhost only)
-- Default port 8080 (configurable via CLI)
+- Default port 7616 (configurable via CLI)
 - No external network access
 
 ### CORS Headers

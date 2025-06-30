@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# Tunnel Client Installation Script
-# This script downloads and installs the latest release of tunnel-client
+# Pori Installation Script
+# This script downloads and installs the latest release of Pori
 
 set -e
 
 # Configuration
 REPO="aduki-Inc/Proxy"
-BINARY_NAME="tunnel-client"
+BINARY_NAME="pori"
 INSTALL_DIR="/usr/local/bin"
-TMP_DIR="/tmp/tunnel-client-install"
+TMP_DIR="/tmp/pori-install"
 
 # Colors for output
 RED='\033[0;31m'
@@ -38,7 +38,7 @@ print_error() {
 # Help function
 show_help() {
     cat << EOF
-Tunnel Client Installation Script
+Pori Installation Script
 
 USAGE:
     install.sh [OPTIONS]
@@ -227,11 +227,10 @@ install_binary() {
     if [ -z "$VERSION" ]; then
         VERSION=$(get_latest_version)
     fi
-    
-    print_info "Installing tunnel-client $VERSION for $platform"
-    
+     print_info "Installing pori $VERSION for $platform"
+
     if [ "$DRY_RUN" = true ]; then
-        print_info "Would download from: https://github.com/$REPO/releases/download/$VERSION/tunnel-client-$platform.tar.gz"
+        print_info "Would download from: https://github.com/$REPO/releases/download/$VERSION/pori-$platform.tar.gz"
         print_info "Would install to: $INSTALL_DIR/$BINARY_NAME"
         return
     fi
@@ -242,7 +241,7 @@ install_binary() {
     cd "$TMP_DIR"
     
     # Download archive
-    archive_name="tunnel-client-$platform.tar.gz"
+    archive_name="pori-$platform.tar.gz"
     download_url="https://github.com/$REPO/releases/download/$VERSION/$archive_name"
     
     print_info "Downloading $archive_name..."
@@ -274,7 +273,7 @@ install_binary() {
     cd /
     rm -rf "$TMP_DIR"
     
-    print_success "tunnel-client $VERSION installed successfully!"
+    print_success "pori $VERSION installed successfully!"
 }
 
 # Verify installation
@@ -306,19 +305,19 @@ show_usage() {
     cat << EOF
 
 USAGE:
-    tunnel-client --url <WEBSOCKET_URL> --token <AUTH_TOKEN>
+    pori --url <WEBSOCKET_URL> --token <AUTH_TOKEN>
 
 EXAMPLES:
     # Basic usage
-    tunnel-client --url wss://proxy.example.com --token your-token
+    pori --url wss://proxy.example.com --token your-token
 
     # With custom local server
-    tunnel-client --url wss://proxy.example.com --token your-token --local http://localhost:8080
+    pori --url wss://proxy.example.com --token your-token --local http://localhost:7616
 
     # With configuration file
-    tunnel-client --config /path/to/config.toml
+    pori --config /path/to/config.toml
 
-For more options, run: tunnel-client --help
+For more options, run: pori --help
 
 EOF
 }

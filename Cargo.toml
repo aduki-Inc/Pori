@@ -1,13 +1,13 @@
 [package]
-name = "tunnel-client"
+name = "pori"
 version = "0.1.0"
 edition = "2021"
 authors = ["femar <femar@example.com>"]
-description = "High-performance tunnel client with dashboard"
+description = "Pori - wild, open proxy client with dashboard"
 license = "MIT"
 
 [[bin]]
-name = "tunnel-client"
+name = "pori"
 path = "src/main.rs"
 
 [dependencies]

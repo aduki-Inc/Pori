@@ -58,9 +58,9 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
-            ./target/release/tunnel-client.exe --version
+            ./target/release/pori.exe --version
           else
-            ./target/release/tunnel-client --version
+            ./target/release/pori --version
           fi
 
   coverage:

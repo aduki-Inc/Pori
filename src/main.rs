@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use tracing::info;
 
-use tunnel_client::{
+use pori::{
     config::cli::CliArgs, config::settings::AppSettings, logging, run_application,
 };
 

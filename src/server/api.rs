@@ -164,11 +164,11 @@ mod tests {
 
     fn create_test_app_state() -> Arc<AppState> {
         let args = CliArgs {
-            url: "ws://localhost:8080".parse().unwrap(),
+            url: "ws://localhost:7616".parse().unwrap(),
             token: "test-token".to_string(),
             protocol: "http".to_string(),
             port: 3000,
-            dashboard_port: 8080,
+            dashboard_port: 7616,
             log_level: "info".to_string(),
             config: None,
             no_dashboard: false,

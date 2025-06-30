@@ -8,10 +8,10 @@ Command-line interface for tunnel client configuration using clap derive macros.
 
 ### Basic Usage
 
-> Run tunnel client with minimal required arguments
+pori --url wss://tunnel.example.com --token my-token --local https://localhost:7616 Run tunnel client with minimal required arguments
 
 ```bash
-tunnel-client --url wss://proxy.example.com --token abc123
+pori --url wss://proxy.example.com --token abc123
 ```
 
 ### Full Configuration
@@ -19,11 +19,11 @@ tunnel-client --url wss://proxy.example.com --token abc123
 > Complete argument specification
 
 ```bash
-tunnel-client \
+pori \
   --url wss://proxy.example.com \
   --token abc123 \
   --local https://localhost:3000 \
-  --dashboard-port 8080 \
+  --dashboard-port 7616 \
   --log-level debug \
   --timeout 30 \
   --max-reconnects 5
@@ -35,12 +35,12 @@ tunnel-client \
 
 ```bash
 export TUNNEL_URL="wss://proxy.example.com"
-export TUNNEL_TOKEN="abc123"
-export TUNNEL_LOCAL="https://localhost:3000"
-export TUNNEL_DASHBOARD_PORT="8080"
+export PORI_TOKEN="abc123"
+export PORI_LOCAL="https://localhost:3000"
+export PORI_DASHBOARD_PORT="7616"
 export RUST_LOG="debug"
 
-tunnel-client
+pori
 ```
 
 ## Argument Specifications
@@ -69,12 +69,12 @@ tunnel-client
 - Default: https://localhost:3000
 - Format: http:// or https:// scheme required
 - Environment: TUNNEL_LOCAL
-- Example: https://localhost:8080
+- Example: https://localhost:7616
 
 **--dashboard-port \<port\>**
 
 - Purpose: Port for local dashboard server
-- Default: 8080
+- Default: 7616
 - Range: 1-65535
 - Environment: TUNNEL_DASHBOARD_PORT
 - Conflicts: Automatically handled if port in use
@@ -187,7 +187,7 @@ tunnel-client
 url = "wss://proxy.example.com"
 token = "abc123"
 local = "https://localhost:3000"
-dashboard_port = 8080
+dashboard_port = 7616
 log_level = "info"
 timeout = 30
 max_reconnects = 0
@@ -197,8 +197,8 @@ no_dashboard = false
 **File location precedence:**
 1. --config argument
 2. TUNNEL_CONFIG environment variable
-3. ./tunnel-client.toml
-4. ~/.tunnel-client.toml
+3. ./pori.toml
+4. ~/.pori.toml
 
 ## Error Handling
 
@@ -243,22 +243,22 @@ no_dashboard = false
 
 **Basic tunnel:**
 ```bash
-tunnel-client --url wss://tunnel.example.com --token my-secret-token
+pori --url wss://tunnel.example.com --token my-secret-token
 ```
 
 **Custom local server:**
 ```bash
-tunnel-client --url wss://tunnel.example.com --token my-token --local https://localhost:8080
+tunnel-client --url wss://tunnel.example.com --token my-token --local https://localhost:7616
 ```
 
 **Headless operation:**
 ```bash
-tunnel-client --url wss://tunnel.example.com --token my-token --no-dashboard
+pori --url wss://tunnel.example.com --token my-token --no-dashboard
 ```
 
 **Debug mode:**
 ```bash
-tunnel-client --url wss://tunnel.example.com --token my-token --log-level debug
+pori --url wss://tunnel.example.com --token my-token --log-level debug
 ```
 
 ## Production Deployment
@@ -280,7 +280,7 @@ Environment=TUNNEL_URL=wss://proxy.example.com
 Environment=TUNNEL_TOKEN=production-token
 Environment=TUNNEL_LOCAL=https://localhost:3000
 Environment=RUST_LOG=info
-ExecStart=/usr/local/bin/tunnel-client
+ExecStart=/usr/local/bin/pori
 Restart=always
 RestartSec=5
 
@@ -298,8 +298,8 @@ docker run -d \
   -e TUNNEL_URL=wss://proxy.example.com \
   -e TUNNEL_TOKEN=abc123 \
   -e TUNNEL_LOCAL=https://app:3000 \
-  -p 8080:8080 \
-  tunnel-client
+  -p 7616:7616 \
+  pori
 ```
 
 This CLI implementation provides flexible configuration options while maintaining security and ease of use for both development and production environments.

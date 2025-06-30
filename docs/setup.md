@@ -79,7 +79,7 @@ pub struct CliArgs {
     pub local: Url,
 
     /// Port for dashboard server
-    #[arg(long, default_value_t = 8080, env = "TUNNEL_DASHBOARD_PORT")]
+    #[arg(long, default_value_t = 7616, env = "TUNNEL_DASHBOARD_PORT")]
     pub dashboard_port: u16,
 
     /// Log level (error, warn, info, debug, trace)
@@ -144,7 +144,7 @@ tunnel-client \
   --url wss://proxy.example.com \
   --token abc123 \
   --local https://localhost:3000 \
-  --dashboard-port 8080 \
+  --dashboard-port 7616 \
   --log-level debug
 
 # Using environment variables
