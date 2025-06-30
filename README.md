@@ -1,6 +1,50 @@
 # Pori
 
-A proxy client built in Rust that creates connections between local services and remote proxy servers through WebSocket tunnels. "Pori" means wild, open.
+A proxy client built in Rust that creates connections between local### Basic Usage
+
+```bash
+pori --url wss://proxy.example.com --token your-auth-token
+```
+
+### Using Configuration Files (Recommended)
+
+Like ngrok, Pori supports configuration files for easier management:
+
+```bash
+# Create a YAML config file
+cat > pori.yml << EOF
+websocket:
+  url: "wss://proxy.example.com"
+  token: "your-auth-token"
+local_server:
+  url: "http://localhost:3000"
+dashboard:
+  port: 7616
+EOF
+
+# Run with config file
+pori --yml pori.yml
+
+# Or place config in default location and just run
+mv pori.yml ~/.config/pori/config.yml
+pori
+```
+
+### Advanced Usage Examples
+
+```bash
+# Connect to HTTPS local service on custom port
+pori --url wss://proxy.example.com --token your-token --protocol https --port 8443
+
+# Use HTTP with custom port and disable dashboard
+pori --url wss://proxy.example.com --token your-token --protocol http --port 8080 --no-dashboard
+
+# With custom dashboard port and debug logging
+pori --url wss://proxy.example.com --token your-token --dashboard-port 9090 --log-level debug
+
+# Mix config file with CLI overrides
+pori --yml pori.yml --dashboard-port 8080
+```te proxy servers through WebSocket tunnels. "Pori" means wild, open.
 
 ## Overview
 
@@ -31,6 +75,20 @@ Pori establishes and maintains WebSocket connections to proxy servers, forwardin
 - **Request Validation**: Input sanitization and validation
 
 ## Installation
+
+### Quick Install (Linux/macOS)
+
+Install Pori globally like ngrok - accessible from anywhere in your terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aduki-Inc/Proxy/main/release/install.sh | bash
+```
+
+After installation, simply run:
+
+```bash
+pori --url wss://proxy.example.com --token your-token
+```
 
 ### Pre-built Binaries
 
@@ -81,16 +139,17 @@ pori --url wss://proxy.example.com --token your-token --dashboard-port 9090 --lo
 ### Configuration Options
 
 ```bash
-pori [OPTIONS] --url <URL> --token <TOKEN>
+pori [OPTIONS]
 
 Options:
-      --url <URL>                    WebSocket URL for cloud/proxy connection
-      --token <TOKEN>                Access token for authentication
-      --protocol <PROTOCOL>          Protocol for local server (http or https) [default: http]
-      --port <PORT>                  Port for local server [default: 3000]
-      --dashboard-port <PORT>        Dashboard server port [default: 7616]
-      --log-level <LEVEL>            Log level [default: info]
-      --config <CONFIG>              Configuration file path
+      --url <URL>                    WebSocket URL for cloud/proxy connection [env: PORI_URL=]
+      --token <TOKEN>                Access token for authentication [env: PORI_TOKEN=]
+      --protocol <PROTOCOL>          Protocol for local server (http or https) [env: PORI_PROTOCOL=] [default: http]
+      --port <PORT>                  Port for local server [env: PORI_PORT=] [default: 3000]
+      --dashboard-port <PORT>        Dashboard server port [env: PORI_DASHBOARD_PORT=] [default: 7616]
+      --log-level <LEVEL>            Log level [env: RUST_LOG=] [default: info]
+      --config <CONFIG>              Configuration file path (TOML or JSON) [env: PORI_CONFIG=]
+      --yml <YML>                    YAML configuration file path [env: PORI_YML=]
       --no-dashboard                 Disable dashboard server
       --timeout <TIMEOUT>            Connection timeout in seconds [default: 30]
       --max-reconnects <MAX>         Reconnection attempts (0 = infinite) [default: 0]
@@ -114,7 +173,39 @@ All command-line options can be configured via environment variables:
 
 ### Configuration File
 
-Create a TOML configuration file for persistent settings:
+Create a TOML, JSON, or YAML configuration file for persistent settings:
+
+#### YAML Configuration (pori.yml)
+
+```yaml
+# WebSocket connection settings
+websocket:
+  url: "wss://proxy.example.com"
+  token: "your-auth-token"
+  timeout: 30
+  max_reconnects: 0
+
+# Local server configuration  
+local_server:
+  url: "http://localhost:3000"
+  verify_ssl: false
+  timeout: 30
+  max_connections: 10
+
+# Dashboard settings
+dashboard:
+  port: 7616
+  bind_address: "127.0.0.1"
+  enable_cors: true
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "pretty"
+  enable_color: true
+```
+
+#### TOML Configuration (pori.toml)
 
 ```toml
 [websocket]
@@ -137,10 +228,23 @@ port = 7616
 level = "info"
 ```
 
-Use the configuration file:
+Use configuration files:
 
 ```bash
-pori --config config.toml
+# Use YAML configuration
+pori --yml pori.yml
+
+# Use TOML configuration
+pori --config pori.toml
+
+# Use default locations (pori tries these automatically):
+# ./pori.yml, ./pori.yaml, ./pori.toml, ./pori.json
+# ~/.pori.yml, ~/.pori.yaml, ~/.pori.toml, ~/.pori.json  
+# ~/.config/pori/config.yml, ~/.config/pori/config.yaml, ~/.config/pori/config.toml
+pori
+
+# Override config values with CLI arguments
+pori --yml pori.yml --dashboard-port 8080
 ```
 
 ## Dashboard

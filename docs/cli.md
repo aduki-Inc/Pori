@@ -34,7 +34,7 @@ pori \
 > Use environment variables for configuration
 
 ```bash
-export TUNNEL_URL="wss://proxy.example.com"
+export PORI_URL="wss://proxy.example.com"
 export PORI_TOKEN="abc123"
 export PORI_LOCAL="https://localhost:3000"
 export PORI_DASHBOARD_PORT="7616"
@@ -51,14 +51,14 @@ pori
 
 - Purpose: WebSocket URL for cloud/proxy connection
 - Format: ws:// or wss:// scheme required
-- Environment: TUNNEL_URL
+- Environment: PORI_URL
 - Example: wss://proxy.example.com/tunnel
 
 **--token \<access-token\>**
 
 - Purpose: Authentication token for cloud/proxy
 - Format: Non-empty string
-- Environment: TUNNEL_TOKEN
+- Environment: PORI_TOKEN
 - Security: Keep confidential, use environment variables in production
 
 ### Optional Arguments
@@ -68,7 +68,7 @@ pori
 - Purpose: Local server URL to forward requests to
 - Default: https://localhost:3000
 - Format: http:// or https:// scheme required
-- Environment: TUNNEL_LOCAL
+- Environment: PORI_LOCAL
 - Example: https://localhost:7616
 
 **--dashboard-port \<port\>**
@@ -76,7 +76,7 @@ pori
 - Purpose: Port for local dashboard server
 - Default: 7616
 - Range: 1-65535
-- Environment: TUNNEL_DASHBOARD_PORT
+- Environment: PORI_DASHBOARD_PORT
 - Conflicts: Automatically handled if port in use
 
 **--log-level \<level\>**
@@ -92,7 +92,7 @@ pori
 - Purpose: Connection timeout for WebSocket
 - Default: 30
 - Range: 1-300 seconds
-- Environment: TUNNEL_TIMEOUT
+- Environment: PORI_TIMEOUT
 - Use case: Adjust for slow networks
 
 **--max-reconnects \<count\>**
@@ -100,7 +100,7 @@ pori
 - Purpose: Maximum reconnection attempts
 - Default: 0 (infinite)
 - Range: 0-999
-- Environment: TUNNEL_MAX_RECONNECTS
+- Environment: PORI_MAX_RECONNECTS
 - Behavior: 0 means infinite attempts
 
 ### Flags
@@ -168,13 +168,13 @@ pori
 
 ### Environment Mapping
 
-- TUNNEL_URL → --url
-- TUNNEL_TOKEN → --token
-- TUNNEL_LOCAL → --local
-- TUNNEL_DASHBOARD_PORT → --dashboard-port
+- PORI_URL → --url
+- PORI_TOKEN → --token
+- PORI_LOCAL → --local
+- PORI_DASHBOARD_PORT → --dashboard-port
 - RUST_LOG → --log-level
-- TUNNEL_TIMEOUT → --timeout
-- TUNNEL_MAX_RECONNECTS → --max-reconnects
+- PORI_TIMEOUT → --timeout
+- PORI_MAX_RECONNECTS → --max-reconnects
 
 ## Configuration File Support
 
@@ -196,7 +196,7 @@ no_dashboard = false
 
 **File location precedence:**
 1. --config argument
-2. TUNNEL_CONFIG environment variable
+2. PORI_CONFIG environment variable
 3. ./pori.toml
 4. ~/.pori.toml
 
@@ -276,9 +276,9 @@ After=network.target
 [Service]
 Type=simple
 User=tunnel
-Environment=TUNNEL_URL=wss://proxy.example.com
-Environment=TUNNEL_TOKEN=production-token
-Environment=TUNNEL_LOCAL=https://localhost:3000
+Environment=PORI_URL=wss://proxy.example.com
+Environment=PORI_TOKEN=production-token
+Environment=PORI_LOCAL=https://localhost:3000
 Environment=RUST_LOG=info
 ExecStart=/usr/local/bin/pori
 Restart=always
@@ -295,9 +295,9 @@ WantedBy=multi-user.target
 **Docker run:**
 ```bash
 docker run -d \
-  -e TUNNEL_URL=wss://proxy.example.com \
-  -e TUNNEL_TOKEN=abc123 \
-  -e TUNNEL_LOCAL=https://app:3000 \
+  -e PORI_URL=wss://proxy.example.com \
+  -e PORI_TOKEN=abc123 \
+  -e PORI_LOCAL=https://app:3000 \
   -p 7616:7616 \
   pori
 ```

@@ -111,27 +111,46 @@ impl AppSettings {
     /// Create settings from CLI arguments
     pub fn from_cli(cli: CliArgs) -> Result<Self> {
         // Load config file if specified
-        let config_file = if let Some(config_path) = &cli.config {
+        let config_file = if let Some(yml_path) = &cli.yml {
+            Self::load_config_file(yml_path)?
+        } else if let Some(config_path) = &cli.config {
             Self::load_config_file(config_path)?
         } else {
             Self::try_load_default_config()?
         };
 
-        Ok(Self {
-            websocket: WebSocketSettings {
-                url: config_file
+        // Get URL from CLI or config file
+        let url = cli
+            .url
+            .clone()
+            .or_else(|| {
+                config_file
                     .websocket
                     .as_ref()
                     .and_then(|ws| ws.url.as_ref())
-                    .map(|url| url.parse())
-                    .transpose()
-                    .context("Invalid WebSocket URL in config file")?
-                    .unwrap_or_else(|| cli.url.clone()),
-                token: config_file
+                    .and_then(|url_str| url_str.parse().ok())
+            })
+            .context("WebSocket URL must be provided via CLI arguments or configuration file")?;
+
+        // Get token from CLI or config file
+        let token = cli
+            .token
+            .clone()
+            .or_else(|| {
+                config_file
                     .websocket
                     .as_ref()
                     .and_then(|ws| ws.token.clone())
-                    .unwrap_or_else(|| cli.token.clone()),
+            })
+            .context("Access token must be provided via CLI arguments or configuration file")?;
+
+        // Determine if TLS is required based on the final URL
+        let requires_tls = url.scheme() == "wss";
+
+        Ok(Self {
+            websocket: WebSocketSettings {
+                url,
+                token,
                 timeout: Duration::from_secs(
                     config_file
                         .websocket
@@ -144,7 +163,7 @@ impl AppSettings {
                     .as_ref()
                     .and_then(|ws| ws.max_reconnects)
                     .unwrap_or(cli.max_reconnects),
-                requires_tls: cli.requires_tls(),
+                requires_tls,
                 ping_interval: Duration::from_secs(
                     config_file
                         .websocket
@@ -260,12 +279,16 @@ impl AppSettings {
         } else if path.ends_with(".json") {
             serde_json::from_str(&content)
                 .with_context(|| format!("Failed to parse JSON config file: {path}"))
+        } else if path.ends_with(".yml") || path.ends_with(".yaml") {
+            serde_yaml::from_str(&content)
+                .with_context(|| format!("Failed to parse YAML config file: {path}"))
         } else {
-            // Try TOML first, then JSON
-            toml::from_str(&content)
+            // Try YAML first, then TOML, then JSON
+            serde_yaml::from_str(&content)
+                .or_else(|_| toml::from_str(&content))
                 .or_else(|_| serde_json::from_str(&content))
                 .with_context(|| {
-                    format!("Failed to parse config file (tried TOML and JSON): {path}")
+                    format!("Failed to parse config file (tried YAML, TOML, and JSON): {path}")
                 })
         }
     }
@@ -273,11 +296,36 @@ impl AppSettings {
     /// Try to load default configuration files
     fn try_load_default_config() -> Result<ConfigFile> {
         // Try common config file locations
-        let possible_paths = ["./pori.toml", "./pori.json", "~/.pori.toml", "~/.pori.json"];
+        let possible_paths = [
+            "./pori.yml",
+            "./pori.yaml",
+            "./pori.toml",
+            "./pori.json",
+            "~/.pori.yml",
+            "~/.pori.yaml",
+            "~/.pori.toml",
+            "~/.pori.json",
+            "~/.config/pori/config.yml",
+            "~/.config/pori/config.yaml",
+            "~/.config/pori/config.toml",
+            "~/.config/pori/config.json",
+        ];
 
         for path in &possible_paths {
-            if let Ok(config) = Self::load_config_file(path) {
-                return Ok(config);
+            let expanded_path = if path.starts_with("~/") {
+                if let Some(home_dir) = dirs::home_dir() {
+                    home_dir.join(&path[2..]).to_string_lossy().to_string()
+                } else {
+                    continue;
+                }
+            } else {
+                path.to_string()
+            };
+
+            if std::path::Path::new(&expanded_path).exists() {
+                if let Ok(config) = Self::load_config_file(&expanded_path) {
+                    return Ok(config);
+                }
             }
         }
 

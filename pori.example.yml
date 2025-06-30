@@ -1,0 +1,47 @@
+# Pori Configuration File
+# Copy this file to pori.yml in your current directory or ~/.config/pori/config.yml
+
+# WebSocket connection settings
+websocket:
+  url: "wss://proxy.example.com"
+  token: "your-auth-token-here"
+  timeout: 30                    # Connection timeout in seconds
+  max_reconnects: 0             # Number of reconnection attempts (0 = infinite)
+  ping_interval: 30             # WebSocket ping interval in seconds
+  pong_timeout: 10              # WebSocket pong timeout in seconds
+
+# Local server configuration
+local_server:
+  url: "http://localhost:3000"  # Local service URL
+  timeout: 30                   # Request timeout in seconds
+  verify_ssl: false             # Verify SSL certificates for HTTPS local servers
+  max_connections: 10           # Maximum concurrent connections
+  keep_alive: 60                # Keep-alive timeout in seconds
+  connect_timeout: 10           # Connection timeout in seconds
+
+# Dashboard settings
+dashboard:
+  port: 7616                    # Dashboard port (default: 7616)
+  bind_address: "127.0.0.1"     # Bind address (default: 127.0.0.1)
+  enable_cors: true             # Enable CORS headers
+  static_file_cache: true       # Cache static files
+
+# Logging configuration
+logging:
+  level: "info"                 # Log level: error, warn, info, debug, trace
+  format: "pretty"              # Log format: pretty, json, compact
+  enable_color: true            # Enable colored output
+
+# Usage Examples:
+# 
+# 1. Use this config file:
+#    pori --yml pori.yml
+#
+# 2. Place in default location and run:
+#    pori
+#
+# 3. Override specific settings:
+#    pori --yml pori.yml --dashboard-port 8080
+#
+# 4. Use with environment variables:
+#    PORI_URL="wss://custom.proxy.com" pori --yml pori.yml

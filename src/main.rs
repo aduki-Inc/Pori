@@ -17,8 +17,10 @@ async fn main() -> Result<()> {
     // Initialize logging
     logging::init(&cli_args.log_level)?;
 
-    info!("Starting tunnel client");
-    info!("URL: {}", cli_args.url);
+    info!("Starting pori");
+    if let Some(ref url) = cli_args.url {
+        info!("URL: {}", url);
+    }
     info!(
         "Local server: {}://localhost:{}",
         cli_args.protocol, cli_args.port

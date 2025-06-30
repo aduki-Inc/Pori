@@ -8,11 +8,11 @@ use url::Url;
 pub struct CliArgs {
     /// WebSocket URL for cloud/proxy connection
     #[arg(long, env = "PORI_URL")]
-    pub url: Url,
+    pub url: Option<Url>,
 
     /// Access token for authentication
     #[arg(long, env = "PORI_TOKEN")]
-    pub token: String,
+    pub token: Option<String>,
 
     /// Protocol for local server (http or https)
     #[arg(long, default_value = "http", env = "PORI_PROTOCOL")]
@@ -30,9 +30,13 @@ pub struct CliArgs {
     #[arg(long, default_value = "info", env = "RUST_LOG")]
     pub log_level: String,
 
-    /// Configuration file path (optional)
+    /// Configuration file path (TOML or JSON)
     #[arg(long, env = "PORI_CONFIG")]
     pub config: Option<String>,
+
+    /// YAML configuration file path
+    #[arg(long, env = "PORI_YML")]
+    pub yml: Option<String>,
 
     /// Disable dashboard server
     #[arg(long, action = clap::ArgAction::SetTrue)]
@@ -65,12 +69,24 @@ impl CliArgs {
 
     /// Validate CLI arguments
     pub fn validate(&self) -> Result<()> {
-        // Validate WebSocket URL scheme
-        if !matches!(self.url.scheme(), "ws" | "wss") {
-            anyhow::bail!(
-                "WebSocket URL must use ws:// or wss:// scheme, got: {}",
-                self.url.scheme()
-            );
+        // If no config file is specified, url and token are required
+        if self.config.is_none() && self.yml.is_none() {
+            if self.url.is_none() {
+                anyhow::bail!("WebSocket URL is required when not using a configuration file");
+            }
+            if self.token.is_none() {
+                anyhow::bail!("Access token is required when not using a configuration file");
+            }
+        }
+
+        // Validate WebSocket URL scheme if provided
+        if let Some(ref url) = self.url {
+            if !matches!(url.scheme(), "ws" | "wss") {
+                anyhow::bail!(
+                    "WebSocket URL must use ws:// or wss:// scheme, got: {}",
+                    url.scheme()
+                );
+            }
         }
 
         // Validate local server protocol
@@ -83,9 +99,11 @@ impl CliArgs {
             anyhow::bail!("Local server port must be greater than 0");
         }
 
-        // Validate access token
-        if self.token.trim().is_empty() {
-            anyhow::bail!("Access token cannot be empty");
+        // Validate access token if provided
+        if let Some(ref token) = self.token {
+            if token.trim().is_empty() {
+                anyhow::bail!("Access token cannot be empty");
+            }
         }
 
         // Validate dashboard port
@@ -119,10 +137,13 @@ impl CliArgs {
 
     /// Get the host part of the WebSocket URL
     pub fn websocket_host(&self) -> Result<String> {
-        self.url
-            .host_str()
-            .map(|h| h.to_string())
-            .context("WebSocket URL must have a valid host")
+        if let Some(ref url) = self.url {
+            url.host_str()
+                .map(|h| h.to_string())
+                .context("WebSocket URL must have a valid host")
+        } else {
+            anyhow::bail!("WebSocket URL not configured")
+        }
     }
 
     /// Get the host part of the local server URL
@@ -138,11 +159,25 @@ impl CliArgs {
 
     /// Check if TLS is required for WebSocket connection
     pub fn requires_tls(&self) -> bool {
-        self.url.scheme() == "wss"
+        self.url.as_ref().map_or(false, |url| url.scheme() == "wss")
     }
 
     /// Check if local server uses HTTPS
     pub fn local_uses_https(&self) -> bool {
         self.protocol.to_lowercase() == "https"
+    }
+
+    /// Get the WebSocket URL (panics if not set)
+    pub fn get_url(&self) -> &Url {
+        self.url
+            .as_ref()
+            .expect("URL should be validated before use")
+    }
+
+    /// Get the access token (panics if not set)
+    pub fn get_token(&self) -> &str {
+        self.token
+            .as_ref()
+            .expect("Token should be validated before use")
     }
 }

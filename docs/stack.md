@@ -23,6 +23,7 @@ This guide covers the technology choices for building a high-performance tunnel 
 - **Binary size**: Smaller final executable compared to higher-level frameworks
 
 **Cargo.toml entry**:
+
 ```toml
 hyper = { version = "1.0", features = ["full"] }
 hyper-util = "0.1"
@@ -42,6 +43,7 @@ http-body-util = "0.1"
 **Purpose**: WebSocket client implementation
 
 **Cargo.toml entry**:
+
 ```toml
 tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
 ```
@@ -59,6 +61,7 @@ tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
 **Purpose**: Asynchronous runtime for Rust
 
 **Cargo.toml entry**:
+
 ```toml
 tokio = { version = "1.0", features = ["full"] }
 ```
@@ -76,6 +79,7 @@ tokio = { version = "1.0", features = ["full"] }
 **Purpose**: Command-line argument parsing
 
 **Cargo.toml entry**:
+
 ```toml
 clap = { version = "4.0", features = ["derive"] }
 ```
@@ -92,6 +96,7 @@ clap = { version = "4.0", features = ["derive"] }
 **Purpose**: JSON/TOML serialization and deserialization
 
 **Cargo.toml entry**:
+
 ```toml
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -109,6 +114,7 @@ toml = "0.8"
 **Purpose**: Structured logging and diagnostics
 
 **Cargo.toml entry**:
+
 ```toml
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -124,6 +130,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ### Error Handling
 
 **Libraries**:
+
 ```toml
 thiserror = "1.0"  # Error derive macros
 anyhow = "1.0"     # Error context and chaining
@@ -142,6 +149,7 @@ anyhow = "1.0"     # Error context and chaining
 **Tool**: cargo-cross
 
 **Installation**:
+
 ```bash
 cargo install cross
 ```
@@ -155,6 +163,7 @@ cargo install cross
 ### Testing Framework
 
 **Built-in testing**:
+
 ```toml
 [dev-dependencies]
 tokio-test = "0.4"
@@ -171,6 +180,7 @@ tokio-test = "0.4"
 **Tool**: criterion
 
 **Cargo.toml entry**:
+
 ```toml
 [dev-dependencies]
 criterion = "0.5"
@@ -256,6 +266,7 @@ debug = true
 - ARM Linux: `aarch64-unknown-linux-gnu`
 
 **Cross.toml configuration**:
+
 ```toml
 [build.env]
 passthrough = [
@@ -296,6 +307,7 @@ compression = ["tokio-tungstenite/deflate"]
 ### Dashboard Files
 
 **Directory structure**:
+
 ```text
 static/
 ├── index.html
@@ -312,6 +324,7 @@ static/
 ```
 
 **Embedding strategy**:
+
 ```toml
 [build-dependencies]
 include_dir = "0.7"

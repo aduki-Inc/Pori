@@ -276,8 +276,9 @@ mod tests {
 
     fn create_test_app_state() -> Arc<AppState> {
         let args = CliArgs {
-            url: "ws://localhost:7616".parse().unwrap(),
-            token: "test-token".to_string(),
+            url: Some("ws://localhost:7616".parse().unwrap()),
+            token: Some("test-token".to_string()),
+            yml: None,
             protocol: "https".to_string(),
             port: 3000,
             dashboard_port: 7616,
