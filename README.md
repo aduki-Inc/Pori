@@ -1,6 +1,8 @@
 # Pori
 
-A proxy client built in Rust that creates connections between local### Basic Usage
+A proxy client built in Rust that creates connections between local services and remote proxy servers through WebSocket tunnels. "Pori" means wild, open.
+
+### Basic Usage
 
 ```bash
 pori --url wss://proxy.example.com --token your-auth-token
