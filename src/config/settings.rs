@@ -312,9 +312,9 @@ impl AppSettings {
         ];
 
         for path in &possible_paths {
-            let expanded_path = if path.starts_with("~/") {
+            let expanded_path = if let Some(stripped) = path.strip_prefix("~/") {
                 if let Some(home_dir) = dirs::home_dir() {
-                    home_dir.join(&path[2..]).to_string_lossy().to_string()
+                    home_dir.join(stripped).to_string_lossy().to_string()
                 } else {
                     continue;
                 }

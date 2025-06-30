@@ -159,7 +159,7 @@ impl CliArgs {
 
     /// Check if TLS is required for WebSocket connection
     pub fn requires_tls(&self) -> bool {
-        self.url.as_ref().map_or(false, |url| url.scheme() == "wss")
+        self.url.as_ref().is_some_and(|url| url.scheme() == "wss")
     }
 
     /// Check if local server uses HTTPS
