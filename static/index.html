@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tunnel Client Dashboard</title>
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <h1>Tunnel Client Dashboard</h1>
+      <div class="status-indicator" id="status">
+        <span class="status-dot"></span>
+        <span class="status-text">Connecting...</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="stats-grid">
+        <div class="stat-card">
+          <h3>Requests Processed</h3>
+          <div class="stat-value" id="requests-processed">0</div>
+        </div>
+        <div class="stat-card">
+          <h3>Successful</h3>
+          <div class="stat-value" id="requests-successful">0</div>
+        </div>
+        <div class="stat-card">
+          <h3>Failed</h3>
+          <div class="stat-value" id="requests-failed">0</div>
+        </div>
+        <div class="stat-card">
+          <h3>Bytes Transferred</h3>
+          <div class="stat-value" id="bytes-transferred">0 B</div>
+        </div>
+      </section>
+
+      <section class="logs">
+        <h2>Recent Activity</h2>
+        <div class="log-container" id="log-container">
+          <div class="log-entry">Dashboard started</div>
+        </div>
+      </section>
+
+      <section class="controls">
+        <button id="refresh-btn" class="btn btn-primary">Refresh</button>
+        <button id="clear-logs-btn" class="btn btn-secondary">Clear Logs</button>
+      </section>
+    </main>
+  </div>
+
+  <script src="/js/main.js"></script>
+</body>
+
+</html>

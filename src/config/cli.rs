@@ -1,0 +1,148 @@
+use anyhow::{Context, Result};
+use clap::Parser;
+use url::Url;
+
+/// Command line interface arguments
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+pub struct CliArgs {
+    /// WebSocket URL for cloud/proxy connection
+    #[arg(long, env = "TUNNEL_URL")]
+    pub url: Url,
+
+    /// Access token for authentication
+    #[arg(long, env = "TUNNEL_TOKEN")]
+    pub token: String,
+
+    /// Protocol for local server (http or https)
+    #[arg(long, default_value = "http", env = "TUNNEL_PROTOCOL")]
+    pub protocol: String,
+
+    /// Port for local server
+    #[arg(long, default_value_t = 3000, env = "TUNNEL_PORT")]
+    pub port: u16,
+
+    /// Port for dashboard server
+    #[arg(long, default_value_t = 8080, env = "TUNNEL_DASHBOARD_PORT")]
+    pub dashboard_port: u16,
+
+    /// Log level (error, warn, info, debug, trace)
+    #[arg(long, default_value = "info", env = "RUST_LOG")]
+    pub log_level: String,
+
+    /// Configuration file path (optional)
+    #[arg(long, env = "TUNNEL_CONFIG")]
+    pub config: Option<String>,
+
+    /// Disable dashboard server
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub no_dashboard: bool,
+
+    /// Connection timeout in seconds
+    #[arg(long, default_value_t = 30)]
+    pub timeout: u64,
+
+    /// Reconnection attempts (0 = infinite)
+    #[arg(long, default_value_t = 0)]
+    pub max_reconnects: u32,
+
+    /// Verify SSL certificates for local server
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub verify_ssl: bool,
+
+    /// Maximum connections to local server
+    #[arg(long, default_value_t = 10)]
+    pub max_connections: usize,
+}
+
+impl CliArgs {
+    /// Parse and validate command line arguments
+    pub fn parse_and_validate() -> Result<Self> {
+        let args = Self::parse();
+        args.validate()?;
+        Ok(args)
+    }
+
+    /// Validate CLI arguments
+    pub fn validate(&self) -> Result<()> {
+        // Validate WebSocket URL scheme
+        if !matches!(self.url.scheme(), "ws" | "wss") {
+            anyhow::bail!(
+                "WebSocket URL must use ws:// or wss:// scheme, got: {}",
+                self.url.scheme()
+            );
+        }
+
+        // Validate local server protocol
+        if !matches!(self.protocol.to_lowercase().as_str(), "http" | "https") {
+            anyhow::bail!("Protocol must be 'http' or 'https', got: {}", self.protocol);
+        }
+
+        // Validate local server port
+        if self.port == 0 {
+            anyhow::bail!("Local server port must be greater than 0");
+        }
+
+        // Validate access token
+        if self.token.trim().is_empty() {
+            anyhow::bail!("Access token cannot be empty");
+        }
+
+        // Validate dashboard port
+        if self.dashboard_port == 0 {
+            anyhow::bail!("Dashboard port must be greater than 0");
+        }
+
+        // Validate timeout
+        if self.timeout == 0 {
+            anyhow::bail!("Timeout must be greater than 0 seconds");
+        }
+
+        // Validate max connections
+        if self.max_connections == 0 {
+            anyhow::bail!("Max connections must be greater than 0");
+        }
+
+        // Validate log level
+        if !matches!(
+            self.log_level.to_lowercase().as_str(),
+            "error" | "warn" | "info" | "debug" | "trace"
+        ) {
+            anyhow::bail!(
+                "Invalid log level: {}. Must be one of: error, warn, info, debug, trace",
+                self.log_level
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Get the host part of the WebSocket URL
+    pub fn websocket_host(&self) -> Result<String> {
+        self.url
+            .host_str()
+            .map(|h| h.to_string())
+            .context("WebSocket URL must have a valid host")
+    }
+
+    /// Get the host part of the local server URL
+    pub fn local_host(&self) -> Result<String> {
+        Ok("localhost".to_string())
+    }
+
+    /// Get the complete local server URL
+    pub fn local_url(&self) -> Result<Url> {
+        let url_string = format!("{}://localhost:{}", self.protocol, self.port);
+        Url::parse(&url_string).context("Failed to construct local server URL")
+    }
+
+    /// Check if TLS is required for WebSocket connection
+    pub fn requires_tls(&self) -> bool {
+        self.url.scheme() == "wss"
+    }
+
+    /// Check if local server uses HTTPS
+    pub fn local_uses_https(&self) -> bool {
+        self.protocol.to_lowercase() == "https"
+    }
+}

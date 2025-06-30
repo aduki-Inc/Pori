@@ -1,0 +1,63 @@
+# Rust
+/target/
+target
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Configuration
+config.toml
+*.config
+
+# Build artifacts
+*.exe
+*.dmg
+*.deb
+*.rpm
+*.tar.gz
+*.zip
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Release artifacts (keep scripts, not binaries)
+release/bin/
+release/*.tar.gz
+release/*.zip
+release/*.deb
+release/*.rpm
+
+# Documentation build
+book/
+mdbook/
+
+# Profiling
+*.prof
+perf.data*
