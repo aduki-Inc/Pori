@@ -111,6 +111,16 @@ impl DashboardService {
             return self.api_handler.handle_request(req).await;
         }
 
+        // Handle WebSocket upgrade for /metrics endpoint
+        if path == "/metrics" && self.is_websocket_upgrade(&req) {
+            return self.handle_metrics_websocket_upgrade(req).await;
+        }
+
+        // Handle WebSocket upgrade for main proxy endpoint
+        if path == "/" && self.is_websocket_upgrade(&req) {
+            return self.handle_proxy_websocket_upgrade(req).await;
+        }
+
         // Handle static files
         if let Some(static_file) = self.static_handler.get_file(path) {
             return self.serve_static_file(static_file, &req);
@@ -217,6 +227,89 @@ impl DashboardService {
     /// Get recent events for dashboard
     pub async fn get_recent_events(&self) -> Vec<DashboardEvent> {
         self.events.read().await.clone()
+    }
+
+    /// Check if request is a WebSocket upgrade
+    fn is_websocket_upgrade(&self, req: &Request<Incoming>) -> bool {
+        req.headers()
+            .get("upgrade")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_lowercase() == "websocket")
+            .unwrap_or(false)
+    }
+
+    /// Handle WebSocket upgrade for main proxy endpoint (/)
+    async fn handle_proxy_websocket_upgrade(
+        &self,
+        req: Request<Incoming>,
+    ) -> Result<Response<Full<Bytes>>> {
+        debug!("WebSocket upgrade requested for proxy endpoint");
+
+        // Validate token from query parameter
+        if let Some(query) = req.uri().query() {
+            if self.validate_websocket_token(query) {
+                // For now, return a placeholder response
+                // In a full implementation, this would upgrade to WebSocket
+                let response = Response::builder()
+                    .status(StatusCode::SWITCHING_PROTOCOLS)
+                    .header("upgrade", "websocket")
+                    .header("connection", "upgrade")
+                    .body(Full::new(Bytes::from("WebSocket upgrade - Proxy endpoint")))?;
+                return Ok(response);
+            }
+        }
+
+        // Invalid token or missing token
+        let response = Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header("content-type", "text/plain")
+            .body(Full::new(Bytes::from("Unauthorized: Invalid or missing token")))?;
+        Ok(response)
+    }
+
+    /// Handle WebSocket upgrade for metrics endpoint (/metrics)
+    async fn handle_metrics_websocket_upgrade(
+        &self,
+        req: Request<Incoming>,
+    ) -> Result<Response<Full<Bytes>>> {
+        debug!("WebSocket upgrade requested for metrics endpoint");
+
+        // Validate token from query parameter
+        if let Some(query) = req.uri().query() {
+            if self.validate_websocket_token(query) {
+                // For now, return a placeholder response
+                // In a full implementation, this would upgrade to WebSocket
+                // and provide real-time metrics data
+                let response = Response::builder()
+                    .status(StatusCode::SWITCHING_PROTOCOLS)
+                    .header("upgrade", "websocket")
+                    .header("connection", "upgrade")
+                    .body(Full::new(Bytes::from("WebSocket upgrade - Metrics endpoint")))?;
+                return Ok(response);
+            }
+        }
+
+        // Invalid token or missing token
+        let response = Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header("content-type", "text/plain")
+            .body(Full::new(Bytes::from("Unauthorized: Invalid or missing token")))?;
+        Ok(response)
+    }
+
+    /// Validate WebSocket token from query parameters
+    fn validate_websocket_token(&self, query: &str) -> bool {
+        // Parse query parameters to find token
+        for param in query.split('&') {
+            if let Some((key, value)) = param.split_once('=') {
+                if key == "token" {
+                    // Compare with configured token
+                    let configured_token = &self.app_state.settings.websocket.token;
+                    return value == configured_token;
+                }
+            }
+        }
+        false
     }
 }
 

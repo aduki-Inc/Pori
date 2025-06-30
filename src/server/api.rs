@@ -31,6 +31,7 @@ impl ApiHandler {
             (&Method::GET, "/api/status") => self.handle_status().await,
             (&Method::GET, "/api/stats") => self.handle_stats().await,
             (&Method::GET, "/api/config") => self.handle_config().await,
+            (&Method::GET, "/api/endpoints") => self.handle_endpoints().await,
             (&Method::POST, "/api/reconnect") => self.handle_reconnect().await,
             (&Method::POST, "/api/shutdown") => self.handle_shutdown().await,
             _ => self.handle_not_found(),
@@ -112,6 +113,69 @@ impl ApiHandler {
         });
 
         self.json_response(StatusCode::OK, response)
+    }
+
+    /// Handle endpoints endpoint - lists available WebSocket endpoints
+    async fn handle_endpoints(&self) -> Result<Response<Full<Bytes>>> {
+        let settings = &self.app_state.settings;
+        let base_url = format!("{}://{}:{}", 
+            if settings.websocket.url.scheme() == "wss" { "wss" } else { "ws" },
+            settings.dashboard.bind_address,
+            settings.dashboard.port
+        );
+
+        let endpoints = json!({
+            "websocket_endpoints": [
+                {
+                    "path": "/",
+                    "name": "Main Proxy Endpoint",
+                    "description": "WebSocket endpoint for HTTP request forwarding",
+                    "url": format!("{}/?token={}", base_url, settings.websocket.token),
+                    "usage": "Main proxy endpoint for request forwarding"
+                },
+                {
+                    "path": "/metrics",
+                    "name": "Real-time Analytics Dashboard",
+                    "description": "WebSocket endpoint for real-time metrics and analytics",
+                    "url": format!("{}/metrics?token={}", base_url, settings.websocket.token),
+                    "usage": "Real-time analytics and metrics dashboard"
+                }
+            ],
+            "api_endpoints": [
+                {
+                    "path": "/api/status",
+                    "method": "GET",
+                    "description": "Get current connection status and basic info"
+                },
+                {
+                    "path": "/api/stats", 
+                    "method": "GET",
+                    "description": "Get detailed statistics and metrics"
+                },
+                {
+                    "path": "/api/config",
+                    "method": "GET", 
+                    "description": "Get current configuration"
+                },
+                {
+                    "path": "/api/endpoints",
+                    "method": "GET",
+                    "description": "Get list of available endpoints (this endpoint)"
+                },
+                {
+                    "path": "/api/reconnect",
+                    "method": "POST",
+                    "description": "Trigger WebSocket reconnection"
+                },
+                {
+                    "path": "/api/shutdown",
+                    "method": "POST", 
+                    "description": "Initiate graceful shutdown"
+                }
+            ]
+        });
+
+        self.json_response(StatusCode::OK, endpoints)
     }
 
     /// Handle not found
@@ -199,6 +263,15 @@ mod tests {
         let handler = ApiHandler::new(app_state);
 
         let response = handler.handle_stats().await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_endpoints_endpoint() {
+        let app_state = create_test_app_state();
+        let handler = ApiHandler::new(app_state);
+
+        let response = handler.handle_endpoints().await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
 

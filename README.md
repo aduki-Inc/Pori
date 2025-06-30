@@ -259,6 +259,40 @@ The dashboard provides monitoring at `http://localhost:7616` (or your configured
 - **Activity Log**: Recent connection events and errors
 - **System Information**: Uptime, memory usage, and configuration details
 
+## API Endpoints
+
+Pori provides both WebSocket and REST API endpoints for integration and monitoring:
+
+### WebSocket Endpoints
+
+- **WS /** - Main proxy endpoint for request forwarding
+- **WS /metrics** - Real-time analytics and metrics dashboard
+
+For complete API documentation, see [docs/api.md](docs/api.md).
+
+### Usage Examples
+
+#### Basic Proxy Connection
+
+```websocket
+wss://server_url/?token=your-auth-token
+```
+
+#### Metrics Dashboard Connection
+
+```websocket
+wss://server_url/metrics?token=your-auth-token
+```
+
+### REST API
+
+- **GET /api/status** - Current connection status and basic info
+- **GET /api/stats** - Detailed statistics and metrics  
+- **GET /api/config** - Current configuration
+- **GET /api/endpoints** - List of available endpoints
+- **POST /api/reconnect** - Trigger WebSocket reconnection
+- **POST /api/shutdown** - Initiate graceful shutdown
+
 ## Architecture
 
 ### Components
