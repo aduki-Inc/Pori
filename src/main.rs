@@ -2,9 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use tracing::info;
 
-use pori::{
-    config::cli::CliArgs, config::settings::AppSettings, logging, run_application,
-};
+use pori::{config::cli::CliArgs, config::settings::AppSettings, logging, run_application};
 
 #[tokio::main]
 async fn main() -> Result<()> {
