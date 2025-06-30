@@ -1,5 +1,8 @@
 use anyhow::Result;
-use hyper::{Body, Method, Request, Response, StatusCode};
+use http_body_util::Full;
+use hyper::body::Bytes;
+use hyper::body::Incoming;
+use hyper::{Method, Request, Response, StatusCode};
 use serde_json::json;
 use std::sync::Arc;
 use tracing::{debug, warn};
@@ -18,7 +21,7 @@ impl ApiHandler {
     }
 
     /// Handle API request
-    pub async fn handle_request(&self, req: Request<Body>) -> Result<Response<Body>> {
+    pub async fn handle_request(&self, req: Request<Incoming>) -> Result<Response<Full<Bytes>>> {
         let path = req.uri().path();
         let method = req.method();
 
@@ -35,7 +38,7 @@ impl ApiHandler {
     }
 
     /// Handle status endpoint
-    async fn handle_status(&self) -> Result<Response<Body>> {
+    async fn handle_status(&self) -> Result<Response<Full<Bytes>>> {
         let stats = self.app_state.get_stats().await;
 
         let status = json!({
@@ -50,7 +53,7 @@ impl ApiHandler {
     }
 
     /// Handle stats endpoint
-    async fn handle_stats(&self) -> Result<Response<Body>> {
+    async fn handle_stats(&self) -> Result<Response<Full<Bytes>>> {
         let stats = self.app_state.get_stats().await;
 
         let response = json!({
@@ -67,7 +70,7 @@ impl ApiHandler {
     }
 
     /// Handle config endpoint
-    async fn handle_config(&self) -> Result<Response<Body>> {
+    async fn handle_config(&self) -> Result<Response<Full<Bytes>>> {
         let settings = &self.app_state.settings;
 
         let config = json!({
@@ -84,7 +87,7 @@ impl ApiHandler {
     }
 
     /// Handle reconnect endpoint
-    async fn handle_reconnect(&self) -> Result<Response<Body>> {
+    async fn handle_reconnect(&self) -> Result<Response<Full<Bytes>>> {
         // This would trigger a WebSocket reconnection
         // For now, we'll just return a success message
         warn!("Reconnect requested via API");
@@ -98,7 +101,7 @@ impl ApiHandler {
     }
 
     /// Handle shutdown endpoint
-    async fn handle_shutdown(&self) -> Result<Response<Body>> {
+    async fn handle_shutdown(&self) -> Result<Response<Full<Bytes>>> {
         // This would trigger a graceful shutdown
         // For now, we'll just return a message
         warn!("Shutdown requested via API");
@@ -112,7 +115,7 @@ impl ApiHandler {
     }
 
     /// Handle not found
-    fn handle_not_found(&self) -> Result<Response<Body>> {
+    fn handle_not_found(&self) -> Result<Response<Full<Bytes>>> {
         let error = json!({
             "error": "Not Found",
             "message": "API endpoint not found"
@@ -122,7 +125,11 @@ impl ApiHandler {
     }
 
     /// Create JSON response
-    fn json_response(&self, status: StatusCode, data: serde_json::Value) -> Result<Response<Body>> {
+    fn json_response(
+        &self,
+        status: StatusCode,
+        data: serde_json::Value,
+    ) -> Result<Response<Full<Bytes>>> {
         let json_string = serde_json::to_string(&data)?;
 
         let response = Response::builder()
@@ -131,20 +138,20 @@ impl ApiHandler {
             .header("access-control-allow-origin", "*")
             .header("access-control-allow-methods", "GET, POST, OPTIONS")
             .header("access-control-allow-headers", "content-type")
-            .body(Body::from(json_string))?;
+            .body(Full::new(Bytes::from(json_string)))?;
 
         Ok(response)
     }
 
     /// Handle CORS preflight requests
-    pub fn handle_cors_preflight(&self) -> Result<Response<Body>> {
+    pub fn handle_cors_preflight(&self) -> Result<Response<Full<Bytes>>> {
         let response = Response::builder()
             .status(StatusCode::OK)
             .header("access-control-allow-origin", "*")
             .header("access-control-allow-methods", "GET, POST, OPTIONS")
             .header("access-control-allow-headers", "content-type")
             .header("access-control-max-age", "86400")
-            .body(Body::empty())?;
+            .body(Full::new(Bytes::new()))?;
 
         Ok(response)
     }

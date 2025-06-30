@@ -94,10 +94,7 @@ impl TunnelHandler {
                 let _ = self
                     .app_state
                     .dashboard_tx
-                    .send(DashboardEvent::RequestForwarded(format!(
-                        "{} {}",
-                        method, url
-                    )));
+                    .send(DashboardEvent::RequestForwarded(format!("{method} {url}")));
 
                 // Update stats
                 self.app_state
@@ -245,7 +242,7 @@ impl TunnelHandler {
         let _ = self
             .app_state
             .dashboard_tx
-            .send(DashboardEvent::Error(format!("Proxy error: {}", error)));
+            .send(DashboardEvent::Error(format!("Proxy error: {error}")));
 
         // Update error stats
         self.app_state

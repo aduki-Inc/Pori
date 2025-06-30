@@ -117,10 +117,7 @@ impl ProxyForwarder {
         let _ = self
             .app_state
             .dashboard_tx
-            .send(DashboardEvent::RequestForwarded(format!(
-                "{} {}",
-                method, path
-            )));
+            .send(DashboardEvent::RequestForwarded(format!("{method} {path}")));
 
         // Forward request to local server
         let result = self
@@ -184,7 +181,7 @@ impl ProxyForwarder {
                 let _ = self
                     .app_state
                     .dashboard_tx
-                    .send(DashboardEvent::Error(format!("Request failed: {}", e)));
+                    .send(DashboardEvent::Error(format!("Request failed: {e}")));
             }
         }
 
@@ -247,9 +244,9 @@ impl ProxyForwarder {
             let path = parsed_url.path();
             let query = parsed_url
                 .query()
-                .map(|q| format!("?{}", q))
+                .map(|q| format!("?{q}"))
                 .unwrap_or_default();
-            Ok(format!("{}{}", path, query))
+            Ok(format!("{path}{query}"))
         } else {
             // Assume it's a relative path
             Ok(format!("/{}", url.trim_start_matches('/')))

@@ -8,9 +8,8 @@ pub fn init(log_level: &str) -> Result<()> {
     let level = parse_log_level(log_level)?;
 
     // Create environment filter
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new(format!("tunnel_client={},tower=warn,hyper=warn", level))
-    });
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(format!("tunnel_client={level},tower=warn,hyper=warn")));
 
     // Setup tracing subscriber
     tracing_subscriber::registry()

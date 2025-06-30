@@ -137,7 +137,7 @@ impl WebSocketClient {
         // Establish WebSocket connection
         let (ws_stream, response) = tokio::time::timeout(
             self.app_state.settings.websocket.timeout,
-            connect_async(&self.app_state.settings.websocket.url),
+            connect_async(self.app_state.settings.websocket.url.as_str()),
         )
         .await
         .context("Connection timeout")?
@@ -164,7 +164,7 @@ impl WebSocketClient {
         let auth_message = self.tunnel_handler.create_auth_message();
         let auth_json = auth_message.to_json()?;
         ws_sink
-            .send(Message::Text(auth_json))
+            .send(Message::Text(auth_json.into()))
             .await
             .context("Failed to send authentication message")?;
 
@@ -301,10 +301,10 @@ impl WebSocketClient {
     ) -> Result<()> {
         let ws_message = if message.has_binary_data() {
             let binary_data = message.to_binary()?;
-            Message::Binary(binary_data)
+            Message::Binary(binary_data.into())
         } else {
             let json_data = message.to_json()?;
-            Message::Text(json_data)
+            Message::Text(json_data.into())
         };
 
         ws_sink

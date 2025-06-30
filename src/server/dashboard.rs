@@ -1,5 +1,8 @@
 use anyhow::Result;
-use hyper::{Body, Method, Request, Response, StatusCode};
+use http_body_util::Full;
+use hyper::body::Bytes;
+use hyper::body::Incoming;
+use hyper::{Method, Request, Response, StatusCode};
 use std::convert::Infallible;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -54,7 +57,10 @@ impl DashboardService {
     }
 
     /// Handle HTTP request
-    pub async fn handle_request(&self, req: Request<Body>) -> Result<Response<Body>, Infallible> {
+    pub async fn handle_request(
+        &self,
+        req: Request<Incoming>,
+    ) -> Result<Response<Full<Bytes>>, Infallible> {
         let method = req.method();
         let path = req.uri().path();
         let query = req.uri().query();
@@ -72,11 +78,13 @@ impl DashboardService {
                 let error_response = Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .header("content-type", "text/plain")
-                    .body(Body::from(format!("Internal Server Error: {}", e)))
+                    .body(Full::new(Bytes::from(format!(
+                        "Internal Server Error: {e}"
+                    ))))
                     .unwrap_or_else(|_| {
                         Response::builder()
                             .status(StatusCode::INTERNAL_SERVER_ERROR)
-                            .body(Body::from("Internal Server Error"))
+                            .body(Full::new(Bytes::from("Internal Server Error")))
                             .unwrap()
                     });
 
@@ -86,7 +94,10 @@ impl DashboardService {
     }
 
     /// Internal request handling
-    async fn handle_request_internal(&self, req: Request<Body>) -> Result<Response<Body>> {
+    async fn handle_request_internal(
+        &self,
+        req: Request<Incoming>,
+    ) -> Result<Response<Full<Bytes>>> {
         let method = req.method();
         let path = req.uri().path();
 
@@ -125,8 +136,8 @@ impl DashboardService {
     fn serve_static_file(
         &self,
         static_file: &super::static_files::StaticFile,
-        req: &Request<Body>,
-    ) -> Result<Response<Body>> {
+        req: &Request<Incoming>,
+    ) -> Result<Response<Full<Bytes>>> {
         // Check If-None-Match header for caching
         if let Some(if_none_match) = req.headers().get("if-none-match") {
             if let Ok(etag_value) = if_none_match.to_str() {
@@ -134,7 +145,7 @@ impl DashboardService {
                     return Ok(Response::builder()
                         .status(StatusCode::NOT_MODIFIED)
                         .header("etag", &static_file.etag)
-                        .body(Body::empty())?);
+                        .body(Full::new(Bytes::new()))?);
                 }
             }
         }
@@ -153,12 +164,13 @@ impl DashboardService {
                 .header("access-control-allow-headers", "content-type");
         }
 
-        let response = response_builder.body(Body::from(static_file.content.clone()))?;
+        let response =
+            response_builder.body(Full::new(Bytes::from(static_file.content.clone())))?;
         Ok(response)
     }
 
     /// Serve default dashboard when no static files are available
-    fn serve_default_dashboard(&self) -> Result<Response<Body>> {
+    fn serve_default_dashboard(&self) -> Result<Response<Full<Bytes>>> {
         let default_files = create_default_static_files();
 
         if let Some(index_file) = default_files.get("index.html") {
@@ -166,7 +178,7 @@ impl DashboardService {
                 .status(StatusCode::OK)
                 .header("content-type", "text/html")
                 .header("access-control-allow-origin", "*")
-                .body(Body::from(index_file.content.clone()))?;
+                .body(Full::new(Bytes::from(index_file.content.clone())))?;
             Ok(response)
         } else {
             self.handle_not_found()
@@ -174,7 +186,7 @@ impl DashboardService {
     }
 
     /// Handle 404 not found
-    fn handle_not_found(&self) -> Result<Response<Body>> {
+    fn handle_not_found(&self) -> Result<Response<Full<Bytes>>> {
         let html = r#"<!DOCTYPE html>
 <html>
 <head>
@@ -197,7 +209,7 @@ impl DashboardService {
             .status(StatusCode::NOT_FOUND)
             .header("content-type", "text/html")
             .header("access-control-allow-origin", "*")
-            .body(Body::from(html))?;
+            .body(Full::new(Bytes::from(html)))?;
 
         Ok(response)
     }
