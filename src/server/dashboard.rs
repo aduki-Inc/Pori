@@ -5,8 +5,11 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error};
 
+use super::{
+    api::ApiHandler,
+    static_files::{create_default_static_files, StaticFileHandler},
+};
 use crate::{AppState, DashboardEvent};
-use super::{api::ApiHandler, static_files::{StaticFileHandler, create_default_static_files}};
 
 /// Dashboard service for handling HTTP requests
 pub struct DashboardService {
@@ -21,10 +24,10 @@ impl DashboardService {
     pub fn new(app_state: Arc<AppState>) -> Self {
         // Try to load static files, fall back to defaults if needed
         let static_handler = Arc::new(StaticFileHandler::new());
-        
+
         // If no static files were loaded, we could fall back to defaults
         // but for now we'll just use the empty handler
-        
+
         let api_handler = Arc::new(ApiHandler::new(app_state.clone()));
 
         Self {
@@ -38,11 +41,11 @@ impl DashboardService {
     /// Handle incoming dashboard event
     pub async fn handle_event(&self, event: DashboardEvent) {
         debug!("Dashboard received event: {:?}", event);
-        
+
         // Store event for dashboard display
         let mut events = self.events.write().await;
         events.push(event);
-        
+
         // Keep only last 100 events
         if events.len() > 100 {
             let drain_count = events.len() - 100;
@@ -59,12 +62,12 @@ impl DashboardService {
         debug!("Dashboard request: {} {} {:?}", method, path, query);
 
         let result = self.handle_request_internal(req).await;
-        
+
         match result {
             Ok(response) => Ok(response),
             Err(e) => {
                 error!("Dashboard request error: {}", e);
-                
+
                 // Return internal server error
                 let error_response = Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -76,7 +79,7 @@ impl DashboardService {
                             .body(Body::from("Internal Server Error"))
                             .unwrap()
                     });
-                
+
                 Ok(error_response)
             }
         }
@@ -88,7 +91,7 @@ impl DashboardService {
         let path = req.uri().path();
 
         // Handle CORS preflight requests
-        if method == &Method::OPTIONS {
+        if method == Method::OPTIONS {
             return self.api_handler.handle_cors_preflight();
         }
 
@@ -157,7 +160,7 @@ impl DashboardService {
     /// Serve default dashboard when no static files are available
     fn serve_default_dashboard(&self) -> Result<Response<Body>> {
         let default_files = create_default_static_files();
-        
+
         if let Some(index_file) = default_files.get("index.html") {
             let response = Response::builder()
                 .status(StatusCode::OK)
@@ -222,10 +225,21 @@ mod tests {
     use crate::config::{cli::CliArgs, settings::AppSettings};
 
     fn create_test_app_state() -> Arc<AppState> {
-        let mut args = CliArgs::parse();
-        args.url = "ws://localhost:8080".parse().unwrap();
-        args.token = "test-token".to_string();
-        
+        let args = CliArgs {
+            url: "ws://localhost:8080".parse().unwrap(),
+            token: "test-token".to_string(),
+            protocol: "http".to_string(),
+            port: 3000,
+            dashboard_port: 8080,
+            log_level: "info".to_string(),
+            config: None,
+            no_dashboard: false,
+            timeout: 30,
+            max_reconnects: 0,
+            verify_ssl: false,
+            max_connections: 10,
+        };
+
         let settings = AppSettings::from_cli(args).unwrap();
         let (app_state, _) = AppState::new(settings);
         Arc::new(app_state)
@@ -235,7 +249,7 @@ mod tests {
     async fn test_dashboard_service_creation() {
         let app_state = create_test_app_state();
         let service = DashboardService::new(app_state);
-        
+
         let events = service.get_recent_events().await;
         assert_eq!(events.len(), 0);
     }
@@ -244,10 +258,10 @@ mod tests {
     async fn test_event_handling() {
         let app_state = create_test_app_state();
         let service = DashboardService::new(app_state);
-        
+
         let event = DashboardEvent::RequestForwarded("GET /test".to_string());
         service.handle_event(event).await;
-        
+
         let events = service.get_recent_events().await;
         assert_eq!(events.len(), 1);
     }

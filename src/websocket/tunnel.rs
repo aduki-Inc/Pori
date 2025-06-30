@@ -1,9 +1,9 @@
+use super::messages::TunnelMessage;
+use crate::{AppState, ConnectionStatus, DashboardEvent};
 use anyhow::Result;
 use std::collections::HashMap;
-use tracing::{debug, warn, error, info, instrument};
-use crate::{AppState, DashboardEvent, ConnectionStatus};
-use super::messages::TunnelMessage;
 use std::sync::Arc;
+use tracing::{debug, error, info, instrument, warn};
 
 /// Handle HTTP tunnel messages
 pub struct TunnelHandler {
@@ -27,35 +27,49 @@ impl TunnelHandler {
 
             TunnelMessage::AuthSuccess { session_id } => {
                 info!("Authentication successful, session ID: {}", session_id);
-                
+
                 // Update connection status
-                let _ = self.app_state.dashboard_tx.send(
-                    DashboardEvent::ConnectionStatus(ConnectionStatus::Connected)
-                );
+                let _ = self
+                    .app_state
+                    .dashboard_tx
+                    .send(DashboardEvent::ConnectionStatus(
+                        ConnectionStatus::Connected,
+                    ));
 
                 // Update stats
-                self.app_state.update_stats(|stats| {
-                    stats.connection_status = "connected".to_string();
-                }).await;
+                self.app_state
+                    .update_stats(|stats| {
+                        stats.connection_status = "connected".to_string();
+                    })
+                    .await;
 
                 Ok(None)
             }
 
             TunnelMessage::AuthError { error } => {
                 error!("Authentication failed: {}", error);
-                
+
                 // Update connection status
-                let _ = self.app_state.dashboard_tx.send(
-                    DashboardEvent::ConnectionStatus(ConnectionStatus::Error(error.clone()))
-                );
+                let _ = self
+                    .app_state
+                    .dashboard_tx
+                    .send(DashboardEvent::ConnectionStatus(ConnectionStatus::Error(
+                        error.clone(),
+                    )));
 
                 // Return error for client to handle
                 Err(anyhow::anyhow!("Authentication failed: {}", error))
             }
 
-            TunnelMessage::HttpRequest { id, method, url, headers, body } => {
+            TunnelMessage::HttpRequest {
+                id,
+                method,
+                url,
+                headers,
+                body,
+            } => {
                 debug!("Received HTTP request: {} {} (ID: {})", method, url, id);
-                
+
                 // Forward to proxy component
                 let proxy_message = crate::proxy::messages::ProxyMessage::HttpRequest {
                     id: id.clone(),
@@ -67,7 +81,7 @@ impl TunnelHandler {
 
                 if let Err(e) = self.app_state.proxy_tx.send(proxy_message) {
                     error!("Failed to forward HTTP request to proxy: {}", e);
-                    
+
                     // Send error response
                     return Ok(Some(TunnelMessage::error_for_request(
                         id,
@@ -77,14 +91,20 @@ impl TunnelHandler {
                 }
 
                 // Notify dashboard
-                let _ = self.app_state.dashboard_tx.send(
-                    DashboardEvent::RequestForwarded(format!("{} {}", method, url))
-                );
+                let _ = self
+                    .app_state
+                    .dashboard_tx
+                    .send(DashboardEvent::RequestForwarded(format!(
+                        "{} {}",
+                        method, url
+                    )));
 
                 // Update stats
-                self.app_state.update_stats(|stats| {
-                    stats.requests_processed += 1;
-                }).await;
+                self.app_state
+                    .update_stats(|stats| {
+                        stats.requests_processed += 1;
+                    })
+                    .await;
 
                 Ok(None)
             }
@@ -95,7 +115,11 @@ impl TunnelHandler {
                 Ok(None)
             }
 
-            TunnelMessage::Error { request_id, error, code } => {
+            TunnelMessage::Error {
+                request_id,
+                error,
+                code,
+            } => {
                 if let Some(req_id) = request_id {
                     error!("Request {} failed: {} (code: {:?})", req_id, error, code);
                 } else {
@@ -103,21 +127,24 @@ impl TunnelHandler {
                 }
 
                 // Notify dashboard
-                let _ = self.app_state.dashboard_tx.send(
-                    DashboardEvent::Error(error.clone())
-                );
+                let _ = self
+                    .app_state
+                    .dashboard_tx
+                    .send(DashboardEvent::Error(error.clone()));
 
                 // Update error stats
-                self.app_state.update_stats(|stats| {
-                    stats.requests_failed += 1;
-                }).await;
+                self.app_state
+                    .update_stats(|stats| {
+                        stats.requests_failed += 1;
+                    })
+                    .await;
 
                 Ok(None)
             }
 
             TunnelMessage::Ping { timestamp } => {
                 debug!("Received ping with timestamp: {}", timestamp);
-                
+
                 // Respond with pong
                 Ok(Some(TunnelMessage::pong(timestamp)))
             }
@@ -127,10 +154,10 @@ impl TunnelHandler {
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs();
-                
+
                 let latency = now.saturating_sub(timestamp);
                 debug!("Received pong, latency: {}s", latency);
-                
+
                 Ok(None)
             }
 
@@ -142,11 +169,14 @@ impl TunnelHandler {
 
             TunnelMessage::Status { status, message } => {
                 info!("Server status: {} - {:?}", status, message);
-                
+
                 // Update connection status
-                let _ = self.app_state.dashboard_tx.send(
-                    DashboardEvent::ConnectionStatus(ConnectionStatus::Connected)
-                );
+                let _ = self
+                    .app_state
+                    .dashboard_tx
+                    .send(DashboardEvent::ConnectionStatus(
+                        ConnectionStatus::Connected,
+                    ));
 
                 Ok(None)
             }
@@ -186,15 +216,18 @@ impl TunnelHandler {
 
         // Notify dashboard
         let body_size = body.as_ref().map(|b| b.len()).unwrap_or(0);
-        let _ = self.app_state.dashboard_tx.send(
-            DashboardEvent::ResponseReceived(status, body_size)
-        );
+        let _ = self
+            .app_state
+            .dashboard_tx
+            .send(DashboardEvent::ResponseReceived(status, body_size));
 
         // Update stats
-        self.app_state.update_stats(|stats| {
-            stats.requests_successful += 1;
-            stats.bytes_forwarded += body_size as u64;
-        }).await;
+        self.app_state
+            .update_stats(|stats| {
+                stats.requests_successful += 1;
+                stats.bytes_forwarded += body_size as u64;
+            })
+            .await;
 
         TunnelMessage::http_response(request_id, status, status_text, headers, body)
     }
@@ -209,14 +242,17 @@ impl TunnelHandler {
         error!("Proxy error for request {}: {}", request_id, error);
 
         // Notify dashboard
-        let _ = self.app_state.dashboard_tx.send(
-            DashboardEvent::Error(format!("Proxy error: {}", error))
-        );
+        let _ = self
+            .app_state
+            .dashboard_tx
+            .send(DashboardEvent::Error(format!("Proxy error: {}", error)));
 
         // Update error stats
-        self.app_state.update_stats(|stats| {
-            stats.requests_failed += 1;
-        }).await;
+        self.app_state
+            .update_stats(|stats| {
+                stats.requests_failed += 1;
+            })
+            .await;
 
         TunnelMessage::error_for_request(request_id, error, status_code)
     }
@@ -249,14 +285,17 @@ impl TunnelHandler {
             if name.is_empty() {
                 anyhow::bail!("Header name cannot be empty");
             }
-            
+
             // Check for invalid characters in header names
             if !name.chars().all(|c| c.is_ascii() && !c.is_control()) {
                 anyhow::bail!("Invalid characters in header name: {}", name);
             }
 
             // Check header value
-            if !value.chars().all(|c| c.is_ascii() && c != '\r' && c != '\n') {
+            if !value
+                .chars()
+                .all(|c| c.is_ascii() && c != '\r' && c != '\n')
+            {
                 anyhow::bail!("Invalid characters in header value for {}: {}", name, value);
             }
         }
@@ -277,9 +316,14 @@ impl TunnelHandler {
         let header_lower = header_name.to_lowercase();
         matches!(
             header_lower.as_str(),
-            "connection" | "upgrade" | "proxy-connection" | 
-            "proxy-authorization" | "te" | "trailers" |
-            "transfer-encoding" | "host"
+            "connection"
+                | "upgrade"
+                | "proxy-connection"
+                | "proxy-authorization"
+                | "te"
+                | "trailers"
+                | "transfer-encoding"
+                | "host"
         )
     }
 }
@@ -287,13 +331,26 @@ impl TunnelHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::settings::AppSettings;
-    use tokio::sync::mpsc;
+    use crate::config::{cli::CliArgs, settings::AppSettings};
 
     fn create_test_app_state() -> Arc<AppState> {
         // This would need proper initialization in actual tests
         // For now, we'll create a minimal mock
-        let settings = AppSettings::from_cli(crate::config::cli::CliArgs::parse()).unwrap();
+        let args = CliArgs {
+            url: "ws://localhost:8080".parse().unwrap(),
+            token: "test-token".to_string(),
+            protocol: "http".to_string(),
+            port: 3000,
+            dashboard_port: 8080,
+            log_level: "info".to_string(),
+            config: None,
+            no_dashboard: false,
+            timeout: 30,
+            max_reconnects: 0,
+            verify_ssl: false,
+            max_connections: 10,
+        };
+        let settings = AppSettings::from_cli(args).unwrap();
         let (app_state, _) = AppState::new(settings);
         Arc::new(app_state)
     }
@@ -305,10 +362,16 @@ mod tests {
 
         let ping_message = TunnelMessage::ping();
         if let TunnelMessage::Ping { timestamp } = ping_message {
-            let response = handler.handle_message(TunnelMessage::Ping { timestamp }).await.unwrap();
-            
+            let response = handler
+                .handle_message(TunnelMessage::Ping { timestamp })
+                .await
+                .unwrap();
+
             assert!(response.is_some());
-            if let Some(TunnelMessage::Pong { response_timestamp }) = response {
+            if let Some(TunnelMessage::Pong {
+                timestamp: response_timestamp,
+            }) = response
+            {
                 assert_eq!(response_timestamp, timestamp);
             }
         }
@@ -323,18 +386,26 @@ mod tests {
         valid_headers.insert("content-type".to_string(), "application/json".to_string());
         valid_headers.insert("authorization".to_string(), "Bearer token".to_string());
 
-        assert!(handler.validate_http_request("GET", "/api/test", &valid_headers).is_ok());
+        assert!(handler
+            .validate_http_request("GET", "/api/test", &valid_headers)
+            .is_ok());
 
         // Test invalid method
-        assert!(handler.validate_http_request("INVALID", "/api/test", &valid_headers).is_err());
+        assert!(handler
+            .validate_http_request("INVALID", "/api/test", &valid_headers)
+            .is_err());
 
         // Test empty URL
-        assert!(handler.validate_http_request("GET", "", &valid_headers).is_err());
+        assert!(handler
+            .validate_http_request("GET", "", &valid_headers)
+            .is_err());
 
         // Test invalid header name
         let mut invalid_headers = HashMap::new();
         invalid_headers.insert("".to_string(), "value".to_string());
-        assert!(handler.validate_http_request("GET", "/api/test", &invalid_headers).is_err());
+        assert!(handler
+            .validate_http_request("GET", "/api/test", &invalid_headers)
+            .is_err());
     }
 
     #[test]

@@ -37,7 +37,7 @@ impl ApiHandler {
     /// Handle status endpoint
     async fn handle_status(&self) -> Result<Response<Body>> {
         let stats = self.app_state.get_stats().await;
-        
+
         let status = json!({
             "status": "ok",
             "connection_status": stats.connection_status,
@@ -52,7 +52,7 @@ impl ApiHandler {
     /// Handle stats endpoint
     async fn handle_stats(&self) -> Result<Response<Body>> {
         let stats = self.app_state.get_stats().await;
-        
+
         let response = json!({
             "requests_processed": stats.requests_processed,
             "requests_successful": stats.requests_successful,
@@ -69,7 +69,7 @@ impl ApiHandler {
     /// Handle config endpoint
     async fn handle_config(&self) -> Result<Response<Body>> {
         let settings = &self.app_state.settings;
-        
+
         let config = json!({
             "websocket_url": settings.websocket.url.to_string(),
             "local_server_url": settings.local_server.url.to_string(),
@@ -88,7 +88,7 @@ impl ApiHandler {
         // This would trigger a WebSocket reconnection
         // For now, we'll just return a success message
         warn!("Reconnect requested via API");
-        
+
         let response = json!({
             "status": "success",
             "message": "Reconnection initiated"
@@ -102,7 +102,7 @@ impl ApiHandler {
         // This would trigger a graceful shutdown
         // For now, we'll just return a message
         warn!("Shutdown requested via API");
-        
+
         let response = json!({
             "status": "success",
             "message": "Shutdown initiated"
@@ -124,7 +124,7 @@ impl ApiHandler {
     /// Create JSON response
     fn json_response(&self, status: StatusCode, data: serde_json::Value) -> Result<Response<Body>> {
         let json_string = serde_json::to_string(&data)?;
-        
+
         let response = Response::builder()
             .status(status)
             .header("content-type", "application/json")
@@ -156,10 +156,21 @@ mod tests {
     use crate::config::{cli::CliArgs, settings::AppSettings};
 
     fn create_test_app_state() -> Arc<AppState> {
-        let mut args = CliArgs::parse();
-        args.url = "ws://localhost:8080".parse().unwrap();
-        args.token = "test-token".to_string();
-        
+        let args = CliArgs {
+            url: "ws://localhost:8080".parse().unwrap(),
+            token: "test-token".to_string(),
+            protocol: "http".to_string(),
+            port: 3000,
+            dashboard_port: 8080,
+            log_level: "info".to_string(),
+            config: None,
+            no_dashboard: false,
+            timeout: 30,
+            max_reconnects: 0,
+            verify_ssl: false,
+            max_connections: 10,
+        };
+
         let settings = AppSettings::from_cli(args).unwrap();
         let (app_state, _) = AppState::new(settings);
         Arc::new(app_state)
@@ -169,7 +180,7 @@ mod tests {
     async fn test_status_endpoint() {
         let app_state = create_test_app_state();
         let handler = ApiHandler::new(app_state);
-        
+
         let response = handler.handle_status().await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -178,7 +189,7 @@ mod tests {
     async fn test_stats_endpoint() {
         let app_state = create_test_app_state();
         let handler = ApiHandler::new(app_state);
-        
+
         let response = handler.handle_stats().await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -187,10 +198,10 @@ mod tests {
     fn test_cors_preflight() {
         let app_state = create_test_app_state();
         let handler = ApiHandler::new(app_state);
-        
+
         let response = handler.handle_cors_preflight().unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let headers = response.headers();
         assert!(headers.contains_key("access-control-allow-origin"));
         assert!(headers.contains_key("access-control-allow-methods"));

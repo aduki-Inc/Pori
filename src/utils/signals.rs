@@ -36,7 +36,7 @@ pub async fn wait_for_shutdown() {
 pub fn setup_signal_handlers() {
     // This function can be used to setup additional signal handling
     // if needed in the future
-    
+
     #[cfg(unix)]
     {
         // On Unix systems, we might want to handle additional signals
@@ -44,7 +44,7 @@ pub fn setup_signal_handlers() {
         tokio::spawn(async {
             let mut sigusr1 = signal::unix::signal(signal::unix::SignalKind::user_defined1())
                 .expect("Failed to install SIGUSR1 handler");
-            
+
             while sigusr1.recv().await.is_some() {
                 info!("Received SIGUSR1 signal - could be used for log rotation");
             }

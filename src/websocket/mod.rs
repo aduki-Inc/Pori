@@ -6,7 +6,7 @@ pub mod tunnel;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{info, error};
+use tracing::{error, info};
 
 use crate::AppState;
 use messages::TunnelMessage;

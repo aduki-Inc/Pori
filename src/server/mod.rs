@@ -1,15 +1,15 @@
+pub mod api;
 pub mod dashboard;
 pub mod static_files;
-pub mod api;
 
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{info, error, debug};
+use tracing::{debug, error, info};
 
 use crate::{AppState, DashboardEvent};
 use dashboard::DashboardService;
@@ -47,9 +47,7 @@ pub async fn run_dashboard_server(
         async move {
             Ok::<_, Infallible>(service_fn(move |req| {
                 let service = service.clone();
-                async move {
-                    service.handle_request(req).await
-                }
+                async move { service.handle_request(req).await }
             }))
         }
     });

@@ -1,14 +1,14 @@
 pub mod config;
-pub mod server;
-pub mod proxy;
-pub mod websocket;
 pub mod logging;
+pub mod proxy;
+pub mod server;
 pub mod utils;
+pub mod websocket;
 
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use tracing::{info, error};
+use tracing::{error, info};
 
 use config::settings::AppSettings;
 
@@ -81,7 +81,7 @@ impl AppState {
         F: FnOnce(&mut AppStats),
     {
         let mut stats = self.stats.write().await;
-        updater(&mut *stats);
+        updater(&mut stats);
     }
 
     pub async fn get_stats(&self) -> AppStats {

@@ -24,7 +24,7 @@ impl StaticFileHandler {
         let mut handler = Self {
             cache: HashMap::new(),
         };
-        
+
         handler.load_static_files();
         handler
     }
@@ -40,32 +40,52 @@ impl StaticFileHandler {
             match entry {
                 include_dir::DirEntry::Dir(subdir) => {
                     let new_prefix = if prefix.is_empty() {
-                        subdir.path().file_name().unwrap().to_str().unwrap().to_string()
+                        subdir
+                            .path()
+                            .file_name()
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_string()
                     } else {
-                        format!("{}/{}", prefix, subdir.path().file_name().unwrap().to_str().unwrap())
+                        format!(
+                            "{}/{}",
+                            prefix,
+                            subdir.path().file_name().unwrap().to_str().unwrap()
+                        )
                     };
                     self.load_files_recursive(subdir, &new_prefix);
                 }
                 include_dir::DirEntry::File(file) => {
                     let file_path = if prefix.is_empty() {
-                        file.path().file_name().unwrap().to_str().unwrap().to_string()
+                        file.path()
+                            .file_name()
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_string()
                     } else {
-                        format!("{}/{}", prefix, file.path().file_name().unwrap().to_str().unwrap())
+                        format!(
+                            "{}/{}",
+                            prefix,
+                            file.path().file_name().unwrap().to_str().unwrap()
+                        )
                     };
-                    
+
                     let content = file.contents().to_vec();
-                    let mime_type = from_path(&file_path)
-                        .first_or_octet_stream()
-                        .to_string();
-                    
+                    let mime_type = from_path(&file_path).first_or_octet_stream().to_string();
+
                     // Generate ETag from content hash
                     let etag = format!("\"{}\"", self.generate_etag(&content));
-                    
-                    self.cache.insert(file_path, StaticFile {
-                        content,
-                        mime_type,
-                        etag,
-                    });
+
+                    self.cache.insert(
+                        file_path,
+                        StaticFile {
+                            content,
+                            mime_type,
+                            etag,
+                        },
+                    );
                 }
             }
         }
@@ -75,12 +95,12 @@ impl StaticFileHandler {
     pub fn get_file(&self, path: &str) -> Option<&StaticFile> {
         // Normalize path (remove leading slash)
         let normalized_path = path.trim_start_matches('/');
-        
+
         // Handle root path
         if normalized_path.is_empty() || normalized_path == "index.html" {
             return self.cache.get("index.html");
         }
-        
+
         self.cache.get(normalized_path)
     }
 
@@ -98,7 +118,7 @@ impl StaticFileHandler {
     fn generate_etag(&self, content: &[u8]) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         content.hash(&mut hasher);
         format!("{:x}", hasher.finish())
@@ -108,7 +128,7 @@ impl StaticFileHandler {
     pub fn get_stats(&self) -> StaticFileStats {
         let total_files = self.cache.len();
         let total_size: usize = self.cache.values().map(|f| f.content.len()).sum();
-        
+
         StaticFileStats {
             total_files,
             total_size,
@@ -132,7 +152,7 @@ pub struct StaticFileStats {
 /// Create default static files if directory doesn't exist
 pub fn create_default_static_files() -> HashMap<String, StaticFile> {
     let mut files = HashMap::new();
-    
+
     // Default index.html
     let index_html = r#"<!DOCTYPE html>
 <html lang="en">
@@ -190,11 +210,14 @@ pub fn create_default_static_files() -> HashMap<String, StaticFile> {
 </body>
 </html>"#;
 
-    files.insert("index.html".to_string(), StaticFile {
-        content: index_html.as_bytes().to_vec(),
-        mime_type: "text/html".to_string(),
-        etag: "\"default-index\"".to_string(),
-    });
+    files.insert(
+        "index.html".to_string(),
+        StaticFile {
+            content: index_html.as_bytes().to_vec(),
+            mime_type: "text/html".to_string(),
+            etag: "\"default-index\"".to_string(),
+        },
+    );
 
     files
 }
@@ -206,17 +229,20 @@ mod tests {
     #[test]
     fn test_static_file_handler() {
         let handler = StaticFileHandler::new();
-        
+
         // Test path normalization
-        assert_eq!(handler.get_file("/test.html").is_some(), handler.get_file("test.html").is_some());
+        assert_eq!(
+            handler.get_file("/test.html").is_some(),
+            handler.get_file("test.html").is_some()
+        );
     }
 
     #[test]
     fn test_default_static_files() {
         let files = create_default_static_files();
-        
+
         assert!(files.contains_key("index.html"));
-        
+
         let index = &files["index.html"];
         assert_eq!(index.mime_type, "text/html");
         assert!(!index.content.is_empty());

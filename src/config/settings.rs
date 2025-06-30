@@ -64,7 +64,7 @@ pub enum LogFormat {
 }
 
 /// Configuration file structure (optional)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 pub struct ConfigFile {
     pub websocket: Option<WebSocketConfig>,
     pub local_server: Option<LocalServerConfig>,
@@ -334,16 +334,5 @@ impl AppSettings {
         }
 
         Ok(())
-    }
-}
-
-impl Default for ConfigFile {
-    fn default() -> Self {
-        Self {
-            websocket: None,
-            local_server: None,
-            dashboard: None,
-            logging: None,
-        }
     }
 }

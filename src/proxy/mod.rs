@@ -1,5 +1,5 @@
-pub mod forwarder;
 pub mod client;
+pub mod forwarder;
 pub mod messages;
 
 use anyhow::Result;

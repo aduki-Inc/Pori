@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use reqwest::{Client, ClientBuilder};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -52,14 +52,13 @@ impl LocalServerClient {
         body: Option<Vec<u8>>,
     ) -> Result<LocalServerResponse> {
         let url = self.build_url(path)?;
-        
+
         debug!("Forwarding {} {} to local server", method, url);
 
         // Build request
-        let mut request_builder = self.client.request(
-            method.parse().context("Invalid HTTP method")?,
-            url.clone(),
-        );
+        let mut request_builder = self
+            .client
+            .request(method.parse().context("Invalid HTTP method")?, url.clone());
 
         // Add headers (excluding certain proxy-specific headers)
         for (key, value) in headers {
@@ -82,7 +81,7 @@ impl LocalServerClient {
 
         let duration = start_time.elapsed();
         let status = response.status();
-        
+
         info!(
             "Local server response: {} {} -> {} ({:?})",
             method, path, status, duration
@@ -90,14 +89,14 @@ impl LocalServerClient {
 
         // Convert response
         let local_response = self.convert_response(response).await?;
-        
+
         Ok(local_response)
     }
 
     /// Build target URL from path
     fn build_url(&self, path: &str) -> Result<Url> {
-        let path = if path.starts_with('/') {
-            &path[1..]
+        let path = if let Some(stripped) = path.strip_prefix('/') {
+            stripped
         } else {
             path
         };
@@ -110,10 +109,7 @@ impl LocalServerClient {
     /// Convert reqwest response to our response type
     async fn convert_response(&self, response: reqwest::Response) -> Result<LocalServerResponse> {
         let status = response.status();
-        let status_text = status
-            .canonical_reason()
-            .unwrap_or("Unknown")
-            .to_string();
+        let status_text = status.canonical_reason().unwrap_or("Unknown").to_string();
 
         // Extract headers
         let mut headers = HashMap::new();
@@ -150,9 +146,14 @@ impl LocalServerClient {
         let header_lower = header_name.to_lowercase();
         matches!(
             header_lower.as_str(),
-            "host" | "connection" | "upgrade" | 
-            "proxy-connection" | "proxy-authorization" |
-            "te" | "trailers" | "transfer-encoding"
+            "host"
+                | "connection"
+                | "upgrade"
+                | "proxy-connection"
+                | "proxy-authorization"
+                | "te"
+                | "trailers"
+                | "transfer-encoding"
         )
     }
 
@@ -161,8 +162,7 @@ impl LocalServerClient {
         let header_lower = header_name.to_lowercase();
         matches!(
             header_lower.as_str(),
-            "connection" | "upgrade" | "proxy-connection" |
-            "transfer-encoding" | "te" | "trailers"
+            "connection" | "upgrade" | "proxy-connection" | "transfer-encoding" | "te" | "trailers"
         )
     }
 

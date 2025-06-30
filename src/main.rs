@@ -2,13 +2,15 @@ use anyhow::Result;
 use clap::Parser;
 use tracing::info;
 
-use tunnel_client::{config::cli::CliArgs, config::settings::AppSettings, logging, run_application};
+use tunnel_client::{
+    config::cli::CliArgs, config::settings::AppSettings, logging, run_application,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Parse command line arguments
     let cli_args = CliArgs::parse();
-    
+
     // Validate arguments
     cli_args.validate()?;
 
@@ -17,7 +19,10 @@ async fn main() -> Result<()> {
 
     info!("Starting tunnel client");
     info!("URL: {}", cli_args.url);
-    info!("Local server: {}://localhost:{}", cli_args.protocol, cli_args.port);
+    info!(
+        "Local server: {}://localhost:{}",
+        cli_args.protocol, cli_args.port
+    );
     if !cli_args.no_dashboard {
         info!("Dashboard port: {}", cli_args.dashboard_port);
     }

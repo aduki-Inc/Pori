@@ -9,13 +9,13 @@ use uuid::Uuid;
 pub enum TunnelMessage {
     /// Authentication message with token
     Auth { token: String },
-    
+
     /// Successful authentication response
     AuthSuccess { session_id: String },
-    
+
     /// Authentication error
     AuthError { error: String },
-    
+
     /// HTTP request from cloud to forward to local server
     HttpRequest {
         id: String,
@@ -24,7 +24,7 @@ pub enum TunnelMessage {
         headers: HashMap<String, String>,
         body: Option<Vec<u8>>,
     },
-    
+
     /// HTTP response from local server to send back to cloud
     HttpResponse {
         id: String,
@@ -33,29 +33,32 @@ pub enum TunnelMessage {
         headers: HashMap<String, String>,
         body: Option<Vec<u8>>,
     },
-    
+
     /// Error response for a request
     Error {
         request_id: Option<String>,
         error: String,
         code: Option<u16>,
     },
-    
+
     /// Ping message for connection health
     Ping { timestamp: u64 },
-    
+
     /// Pong response to ping
     Pong { timestamp: u64 },
-    
+
     /// Statistics message
     Stats {
         requests_processed: u64,
         bytes_transferred: u64,
         uptime_seconds: u64,
     },
-    
+
     /// Connection status update
-    Status { status: String, message: Option<String> },
+    Status {
+        status: String,
+        message: Option<String>,
+    },
 }
 
 impl TunnelMessage {
@@ -262,7 +265,7 @@ mod tests {
         let message = TunnelMessage::auth("test-token".to_string());
         let json = message.to_json().unwrap();
         let deserialized = TunnelMessage::from_json(&json).unwrap();
-        
+
         match deserialized {
             TunnelMessage::Auth { token } => assert_eq!(token, "test-token"),
             _ => panic!("Wrong message type"),
@@ -273,7 +276,7 @@ mod tests {
     fn test_http_request_message() {
         let mut headers = HashMap::new();
         headers.insert("content-type".to_string(), "application/json".to_string());
-        
+
         let message = TunnelMessage::http_request(
             "GET".to_string(),
             "/api/test".to_string(),

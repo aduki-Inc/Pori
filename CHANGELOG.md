@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Initial project structure and implementation
 - WebSocket tunnel client with automatic reconnection
 - HTTP request forwarding to local services
@@ -31,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2025-06-30
 
 ### Added
+
 - Initial release of tunnel-client
 - Core WebSocket tunneling functionality
 - HTTP proxy forwarding capabilities

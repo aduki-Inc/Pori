@@ -14,13 +14,13 @@ Downloads and installs the latest (or specified) release of tunnel-client from G
 
 ```bash
 # Install latest version
-curl -fsSL https://raw.githubusercontent.com/your-org/tunnel-client/main/release/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/aduki-Inc/Proxy/main/release/install.sh | bash
 
 # Install specific version
-curl -fsSL https://raw.githubusercontent.com/your-org/tunnel-client/main/release/install.sh | bash -s -- --version v1.0.0
+curl -fsSL https://raw.githubusercontent.com/aduki-Inc/Proxy/main/release/install.sh | bash -s -- --version v1.0.0
 
 # Install to custom directory
-curl -fsSL https://raw.githubusercontent.com/your-org/tunnel-client/main/release/install.sh | bash -s -- --dir ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/aduki-Inc/Proxy/main/release/install.sh | bash -s -- --dir ~/.local/bin
 
 # Dry run to see what would be done
 ./install.sh --dry-run
@@ -92,12 +92,12 @@ Prepares a new release by updating version numbers, running tests, building bina
 #### Quick Install (Linux/macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-org/tunnel-client/main/release/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/aduki-Inc/Proxy/main/release/install.sh | bash
 ```
 
 #### Manual Installation
 
-1. Go to [Releases](https://github.com/your-org/tunnel-client/releases)
+1. Go to [Releases](https://github.com/aduki-Inc/Proxy/releases)
 2. Download the appropriate binary for your platform
 3. Extract the archive
 4. Move the binary to a directory in your PATH
@@ -147,7 +147,7 @@ All releases include SHA256 checksums. Verify downloads:
 
 ```bash
 # Download checksum file
-curl -fsSL https://github.com/your-org/tunnel-client/releases/download/v1.0.0/SHA256SUMS -o SHA256SUMS
+curl -fsSL https://github.com/aduki-Inc/Proxy/releases/download/v1.0.0/SHA256SUMS -o SHA256SUMS
 
 # Verify specific file
 sha256sum -c SHA256SUMS --ignore-missing

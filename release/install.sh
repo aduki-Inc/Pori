@@ -6,7 +6,7 @@
 set -e
 
 # Configuration
-REPO="your-org/tunnel-client"
+REPO="aduki-Inc/Proxy"
 BINARY_NAME="tunnel-client"
 INSTALL_DIR="/usr/local/bin"
 TMP_DIR="/tmp/tunnel-client-install"
