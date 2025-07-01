@@ -7,10 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2025-07-01
+
+### Added
+
+- **Enhanced Logging System**
+  - Custom log levels: `LOCAL` for HTTP server operations, `PROXY` for WebSocket/proxy operations
+  - Human-readable timestamp format (YYYY-MM-DD HH:MM:SS.mmm) without timezone
+  - Color-coded log levels: Magenta for PROXY, Cyan for LOCAL
+  - Custom `local_log!()` and `proxy_log!()` macros for categorized logging
+  - Professional logging output without emojis
+
+- **WebSocket Token Authentication**
+  - Token-based authentication via query parameters (`?token=<token>`)
+  - Automatic token appending to WebSocket URLs from configuration
+  - Improved WebSocket message handling for authentication responses
+  - Better error handling for non-tunnel messages
+
+- **Documentation and Code Quality**
+  - Comprehensive API documentation with endpoint examples
+  - Enhanced file organization instructions for development
+  - Updated dependencies (chrono for timestamp formatting)
+  - Removed redundant authentication messages for WebSocket connections
+
 ### Changed
 
-- Improved release documentation and scripts
-- Updated repository references to new GitHub location
+- WebSocket connections now use token query parameters instead of separate auth messages
+- Logging format shows `LOCAL:` and `PROXY:` instead of `INFO LOCAL:` and `INFO PROXY:`
+- Improved error handling in WebSocket client for authentication responses
+- Cleaner startup banner without emoji characters
+
+### Fixed
+
+- Compilation warnings for unused imports
+- WebSocket authentication flow simplified and more reliable
+- Professional logging output suitable for production environments
 
 ## [0.1.2] - 2025-06-30
 
