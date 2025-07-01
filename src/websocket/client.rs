@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
+use serde_json;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, Mutex};
@@ -7,7 +8,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, Web
 use tracing::{debug, error, info, instrument, warn};
 
 use super::{messages::TunnelMessage, reconnect::ReconnectManager, tunnel::TunnelHandler};
-use crate::{AppState, ConnectionStatus, DashboardEvent};
+use crate::{proxy_log, AppState, ConnectionStatus, DashboardEvent};
 
 type WsStream = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
@@ -45,7 +46,7 @@ impl WebSocketClient {
     /// Main client run loop with reconnection
     #[instrument(skip(self))]
     pub async fn run(&self) -> Result<()> {
-        info!(
+        proxy_log!(
             "Starting WebSocket client for URL: {}",
             self.app_state.settings.websocket.url
         );
@@ -73,7 +74,7 @@ impl WebSocketClient {
             // Attempt connection
             match self.connect_and_run().await {
                 Ok(_) => {
-                    info!("WebSocket connection closed normally");
+                    proxy_log!("WebSocket connection closed normally");
 
                     // Reset reconnection counter on successful connection
                     let mut manager = self.reconnect_manager.lock().await;
@@ -129,7 +130,12 @@ impl WebSocketClient {
     /// Single connection attempt and message handling
     #[instrument(skip(self))]
     async fn connect_and_run(&self) -> Result<()> {
-        info!(
+        // Build URL with token query parameter
+        let mut connection_url = self.app_state.settings.websocket.url.clone();
+        connection_url.query_pairs_mut()
+            .append_pair("token", &self.app_state.settings.websocket.token);
+        
+        proxy_log!(
             "Attempting WebSocket connection to {}",
             self.app_state.settings.websocket.url
         );
@@ -137,13 +143,13 @@ impl WebSocketClient {
         // Establish WebSocket connection
         let (ws_stream, response) = tokio::time::timeout(
             self.app_state.settings.websocket.timeout,
-            connect_async(self.app_state.settings.websocket.url.as_str()),
+            connect_async(connection_url.as_str()),
         )
         .await
         .context("Connection timeout")?
         .context("Failed to connect to WebSocket server")?;
 
-        info!(
+        proxy_log!(
             "WebSocket connected, response status: {}",
             response.status()
         );
@@ -160,13 +166,8 @@ impl WebSocketClient {
             *tx_guard = Some(outbound_tx);
         }
 
-        // Send authentication message
-        let auth_message = self.tunnel_handler.create_auth_message();
-        let auth_json = auth_message.to_json()?;
-        ws_sink
-            .send(Message::Text(auth_json.into()))
-            .await
-            .context("Failed to send authentication message")?;
+        // Since we're authenticating via query parameter, no need to send auth message
+        proxy_log!("WebSocket authenticated via token query parameter");
 
         // Setup ping task
         let ping_task = {
@@ -209,7 +210,7 @@ impl WebSocketClient {
                             break;
                         }
                         None => {
-                            info!("WebSocket stream ended");
+                            proxy_log!("WebSocket stream ended");
                             break;
                         }
                     }
@@ -252,11 +253,45 @@ impl WebSocketClient {
             Message::Text(text) => {
                 debug!("Received text message: {}", text);
 
-                let tunnel_message =
-                    TunnelMessage::from_json(&text).context("Failed to parse tunnel message")?;
-
-                if let Some(response) = self.tunnel_handler.handle_message(tunnel_message).await? {
-                    self.send_message(response).await?;
+                // Try to parse as tunnel message first
+                match TunnelMessage::from_json(&text) {
+                    Ok(tunnel_message) => {
+                        if let Some(response) = self.tunnel_handler.handle_message(tunnel_message).await? {
+                            self.send_message(response).await?;
+                        }
+                    }
+                    Err(_) => {
+                        // Not a tunnel message, check if it's a server status/auth message
+                        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
+                            if let Some(msg_type) = value.get("type").and_then(|v| v.as_str()) {
+                                match msg_type {
+                                    "auth" => {
+                                        if let Some(status) = value.get("status").and_then(|v| v.as_str()) {
+                                            proxy_log!("Authentication status: {}", status);
+                                            if status == "authenticated" {
+                                                // Update connection status to connected
+                                                let _ = self.app_state.dashboard_tx.send(
+                                                    DashboardEvent::ConnectionStatus(ConnectionStatus::Connected)
+                                                );
+                                            }
+                                        }
+                                    }
+                                    "error" => {
+                                        if let Some(error_msg) = value.get("message").and_then(|v| v.as_str()) {
+                                            warn!("Server error: {}", error_msg);
+                                        }
+                                    }
+                                    _ => {
+                                        debug!("Received unhandled server message type: {}", msg_type);
+                                    }
+                                }
+                            } else {
+                                debug!("Received non-tunnel message: {}", text);
+                            }
+                        } else {
+                            warn!("Received unparseable text message: {}", text);
+                        }
+                    }
                 }
             }
 

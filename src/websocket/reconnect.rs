@@ -91,7 +91,7 @@ impl ReconnectManager {
             "Reconnection attempt {} of {}, waiting {:?}",
             self.current_attempt,
             if self.max_attempts == 0 {
-                "∞".to_string()
+                "unlimited".to_string()
             } else {
                 self.max_attempts.to_string()
             },

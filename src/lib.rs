@@ -98,14 +98,17 @@ pub struct AppChannels {
 
 /// Initialize and run the application
 pub async fn run_application(settings: AppSettings) -> Result<()> {
-    info!("Starting tunnel client application");
+    info!("Initializing pori application components");
 
     // Create application state and channels
     let (app_state, channels) = AppState::new(settings);
     let app_state = Arc::new(app_state);
 
+    info!("Application state initialized");
+
     // Start application components concurrently
     let dashboard_task = if !app_state.settings.no_dashboard {
+        local_log!("Starting dashboard server on port {}", app_state.settings.dashboard.port);
         Some(tokio::spawn({
             let state = app_state.clone();
             async move {
@@ -115,9 +118,12 @@ pub async fn run_application(settings: AppSettings) -> Result<()> {
             }
         }))
     } else {
+        local_log!("Dashboard server disabled");
         None
     };
 
+    info!("Starting proxy forwarder for local server: {}", 
+          app_state.settings.local_server.url);
     let proxy_task = tokio::spawn({
         let state = app_state.clone();
         async move {
@@ -127,6 +133,7 @@ pub async fn run_application(settings: AppSettings) -> Result<()> {
         }
     });
 
+    proxy_log!("Starting WebSocket client connecting to {}", app_state.settings.websocket.url);
     let websocket_task = tokio::spawn({
         let state = app_state.clone();
         async move {
@@ -135,6 +142,8 @@ pub async fn run_application(settings: AppSettings) -> Result<()> {
             }
         }
     });
+
+    info!("All components started successfully - Pori is ready!");
 
     // Wait for shutdown signal
     let shutdown_task = tokio::spawn(async {

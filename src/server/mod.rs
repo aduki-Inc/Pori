@@ -10,9 +10,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
-use crate::{AppState, DashboardEvent};
+use crate::{local_log, AppState, DashboardEvent};
 use dashboard::DashboardService;
 
 /// Run the dashboard HTTP server
@@ -26,7 +26,7 @@ pub async fn run_dashboard_server(
         .parse()
         .context("Invalid dashboard address")?;
 
-    info!("Starting dashboard server on http://{}", addr);
+    local_log!("Starting dashboard server on http://{}", addr);
 
     // Create dashboard service
     let service = Arc::new(DashboardService::new(app_state.clone()));
@@ -47,7 +47,7 @@ pub async fn run_dashboard_server(
         .await
         .context("Failed to bind to dashboard address")?;
 
-    info!("Dashboard server listening on http://{}", addr);
+    local_log!("Dashboard server listening on http://{}", addr);
 
     // Accept connections
     let server_task = tokio::spawn(async move {
@@ -92,6 +92,6 @@ pub async fn run_dashboard_server(
         }
     }
 
-    info!("Dashboard server stopped");
+    local_log!("Dashboard server stopped");
     Ok(())
 }

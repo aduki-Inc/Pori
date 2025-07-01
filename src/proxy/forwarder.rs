@@ -1,13 +1,13 @@
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 use super::{
     client::{LocalServerClient, LocalServerResponse},
     messages::ProxyMessage,
 };
-use crate::{AppState, DashboardEvent};
+use crate::{local_log, AppState, DashboardEvent};
 
 /// HTTP proxy forwarder that forwards requests to local server
 pub struct ProxyForwarder {
@@ -46,7 +46,7 @@ impl ProxyForwarder {
     /// Main forwarder run loop
     #[instrument(skip(self, message_rx))]
     pub async fn run(&self, mut message_rx: mpsc::UnboundedReceiver<ProxyMessage>) -> Result<()> {
-        info!("HTTP proxy forwarder started");
+        local_log!("HTTP proxy forwarder started");
 
         while let Some(message) = message_rx.recv().await {
             match message {
@@ -83,7 +83,7 @@ impl ProxyForwarder {
             }
         }
 
-        info!("Proxy forwarder shutting down");
+        local_log!("Proxy forwarder shutting down");
         Ok(())
     }
 
@@ -154,7 +154,7 @@ impl ProxyForwarder {
                 // Send response back via WebSocket
                 self.send_response(request_id, response).await?;
 
-                info!(
+                local_log!(
                     "Request completed successfully: {} {} -> {} ({:?})",
                     method, path, status, duration
                 );

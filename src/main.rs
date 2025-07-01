@@ -15,17 +15,20 @@ async fn main() -> Result<()> {
     // Initialize logging
     logging::init(&cli_args.log_level)?;
 
-    info!("Starting pori");
+    // Print startup banner
+    println!("Starting Pori v{}", env!("CARGO_PKG_VERSION"));
+    info!("Starting pori application");
     if let Some(ref url) = cli_args.url {
-        info!("URL: {}", url);
+        info!("WebSocket URL: {}", url);
     }
     info!(
         "Local server: {}://localhost:{}",
         cli_args.protocol, cli_args.port
     );
     if !cli_args.no_dashboard {
-        info!("Dashboard port: {}", cli_args.dashboard_port);
+        info!("Dashboard server: http://localhost:{}", cli_args.dashboard_port);
     }
+    info!("Log level: {}", cli_args.log_level);
 
     // Create application settings from CLI arguments
     let settings = AppSettings::from_cli(cli_args)?;

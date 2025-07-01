@@ -6,9 +6,9 @@ pub mod tunnel;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{error, info};
+use tracing::error;
 
-use crate::AppState;
+use crate::{proxy_log, AppState};
 use messages::TunnelMessage;
 
 /// Run the WebSocket client component
@@ -16,7 +16,7 @@ pub async fn run_websocket_client(
     app_state: Arc<AppState>,
     mut message_rx: mpsc::UnboundedReceiver<TunnelMessage>,
 ) -> Result<()> {
-    info!("Starting WebSocket client");
+    proxy_log!("Starting WebSocket client");
 
     // Create WebSocket client
     let ws_client = client::WebSocketClient::new(app_state.clone())?;
@@ -54,6 +54,6 @@ pub async fn run_websocket_client(
         }
     }
 
-    info!("WebSocket client stopped");
+    proxy_log!("WebSocket client stopped");
     Ok(())
 }
