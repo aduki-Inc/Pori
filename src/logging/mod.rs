@@ -112,7 +112,7 @@ pub fn init(log_level: &str) -> Result<()> {
         Level::ERROR => EnvFilter::new("pori=error,PROXY=error,LOCAL=error,tower=warn,hyper=warn"),
     });
 
-    // Setup tracing subscriber with custom formatter
+    // Set up tracing subscriber with a custom formatter
     tracing_subscriber::registry()
         .with(
             fmt::layer()

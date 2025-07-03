@@ -19,7 +19,7 @@ pub struct StaticFile {
 }
 
 impl StaticFileHandler {
-    /// Create new static file handler
+    /// Create a new static file handler
     pub fn new() -> Self {
         let mut handler = Self {
             cache: HashMap::new(),
@@ -34,7 +34,7 @@ impl StaticFileHandler {
         self.load_files_recursive(&STATIC_DIR, "");
     }
 
-    /// Recursively load files from directory
+    /// Recursively load files from a directory
     fn load_files_recursive(&mut self, dir: &Dir, prefix: &str) {
         for entry in dir.entries() {
             match entry {
@@ -93,7 +93,7 @@ impl StaticFileHandler {
 
     /// Get static file by path
     pub fn get_file(&self, path: &str) -> Option<&StaticFile> {
-        // Normalize path (remove leading slash)
+        // Normalize a path (remove leading slash)
         let normalized_path = path.trim_start_matches('/');
 
         // Handle root path
@@ -104,7 +104,7 @@ impl StaticFileHandler {
         self.cache.get(normalized_path)
     }
 
-    /// Check if path is a static file
+    /// Check if a path is a static file
     pub fn is_static_file(&self, path: &str) -> bool {
         self.get_file(path).is_some()
     }
@@ -149,7 +149,7 @@ pub struct StaticFileStats {
     pub total_size: usize,
 }
 
-/// Create default static files if directory doesn't exist
+/// Create default static files if the directory doesn't exist
 pub fn create_default_static_files() -> HashMap<String, StaticFile> {
     let mut files = HashMap::new();
 

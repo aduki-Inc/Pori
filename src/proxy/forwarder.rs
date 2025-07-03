@@ -7,9 +7,9 @@ use super::{
     client::{LocalServerClient, LocalServerResponse},
     messages::ProxyMessage,
 };
-use crate::{local_log, AppState, DashboardEvent};
+use crate::{local_log, utils::http::get_status_description, AppState, DashboardEvent};
 
-/// HTTP proxy forwarder that forwards requests to local server
+/// HTTP proxy forwarder that forwards requests to a local server
 pub struct ProxyForwarder {
     local_client: LocalServerClient,
     app_state: Arc<AppState>,
@@ -28,7 +28,7 @@ pub struct ProxyStats {
 }
 
 impl ProxyForwarder {
-    /// Create new proxy forwarder
+    /// Create a new proxy forwarder
     pub fn new(app_state: Arc<AppState>) -> Result<Self> {
         let local_client = LocalServerClient::new(
             app_state.settings.local_server.url.clone(),
@@ -57,7 +57,7 @@ impl ProxyForwarder {
                     headers,
                     body,
                 } => {
-                    // Process request in background to avoid blocking
+                    // Process request in the background to avoid blocking
                     let forwarder = self.clone();
                     tokio::spawn(async move {
                         if let Err(e) = forwarder
@@ -108,6 +108,13 @@ impl ProxyForwarder {
         // Extract path from URL
         let path = self.extract_path_from_url(&url)?;
 
+        local_log!(
+            "Forwarding request to local server: {} {} (ID: {})",
+            method,
+            path,
+            request_id
+        );
+
         debug!(
             "Processing request: {} {} (ID: {})",
             method, path, request_id
@@ -119,90 +126,240 @@ impl ProxyForwarder {
             .dashboard_tx
             .send(DashboardEvent::RequestForwarded(format!("{method} {path}")));
 
-        // Forward request to local server
-        let result = self
-            .local_client
-            .forward_request(&method, &path, headers, body)
-            .await;
+        // Forward request to local server with timeout handling
+        let result = tokio::time::timeout(
+            self.app_state.settings.local_server.timeout,
+            self.local_client
+                .forward_request(&method, &path, headers, body),
+        )
+        .await;
 
         let duration = start_time.elapsed();
 
         match result {
-            Ok(response) => {
-                // Update stats
-                {
-                    let mut stats = self.stats.write().await;
-                    stats.requests_processed += 1;
-                    stats.requests_successful += 1;
-                    stats.active_requests -= 1;
-
-                    if let Some(ref body) = response.body {
-                        stats.bytes_forwarded += body.len() as u64;
-                    }
-
-                    // Update average response time
-                    let duration_ms = duration.as_millis() as f64;
-                    let count = stats.requests_processed as f64;
-                    let current_avg = stats.average_response_time_ms;
-                    stats.average_response_time_ms =
-                        (current_avg * (count - 1.0) + duration_ms) / count;
-                }
-
-                // Store status before sending
-                let status = response.status;
-
-                // Send response back via WebSocket
-                self.send_response(request_id, response).await?;
-
-                local_log!(
-                    "Request completed successfully: {} {} -> {} ({:?})",
-                    method, path, status, duration
-                );
-            }
-            Err(e) => {
-                // Update error stats
-                {
-                    let mut stats = self.stats.write().await;
-                    stats.requests_processed += 1;
-                    stats.requests_failed += 1;
-                    stats.active_requests -= 1;
-                }
-
-                error!(
-                    "Request failed: {} {} -> Error: {} ({:?})",
-                    method, path, e, duration
-                );
-
-                // Send error response
-                self.send_error_response(request_id, 502, "Bad Gateway", &e.to_string())
+            Ok(Ok(response)) => {
+                // Successfully received response from a local server
+                self.handle_successful_response(request_id, method, path, response, duration)
                     .await?;
-
-                // Notify dashboard
-                let _ = self
-                    .app_state
-                    .dashboard_tx
-                    .send(DashboardEvent::Error(format!("Request failed: {e}")));
+            }
+            Ok(Err(e)) => {
+                // Check if it's a connection error or server error
+                let error_string = e.to_string().to_lowercase();
+                if error_string.contains("connection")
+                    || error_string.contains("refused")
+                    || error_string.contains("unreachable")
+                    || error_string.contains("network")
+                {
+                    // Connection/network error - local server is unreachable
+                    self.handle_connection_error(request_id, method, path, e, duration)
+                        .await?;
+                } else {
+                    // Other server error (e.g., HTTP error responses)
+                    self.handle_server_error(request_id, method, path, e, duration)
+                        .await?;
+                }
+            }
+            Err(_) => {
+                // Request timed out
+                self.handle_timeout_error(request_id, method, path, duration)
+                    .await?;
             }
         }
 
         Ok(())
     }
 
-    /// Send successful response back via WebSocket
-    async fn send_response(&self, request_id: String, response: LocalServerResponse) -> Result<()> {
-        let tunnel_message = crate::websocket::messages::TunnelMessage::http_response(
+    /// Handle successful response from local server
+    async fn handle_successful_response(
+        &self,
+        request_id: String,
+        method: String,
+        path: String,
+        response: LocalServerResponse,
+        duration: std::time::Duration,
+    ) -> Result<()> {
+        // Update stats
+        {
+            let mut stats = self.stats.write().await;
+            stats.requests_processed += 1;
+            stats.requests_successful += 1;
+            stats.active_requests -= 1;
+
+            if let Some(ref body) = response.body {
+                stats.bytes_forwarded += body.len() as u64;
+            }
+
+            // Update average response time
+            let duration_ms = duration.as_millis() as f64;
+            let count = stats.requests_processed as f64;
+            let current_avg = stats.average_response_time_ms;
+            stats.average_response_time_ms = (current_avg * (count - 1.0) + duration_ms) / count;
+        }
+
+        // Store status before sending
+        let status = response.status;
+        let body_size = response.body.as_ref().map(|b| b.len()).unwrap_or(0);
+        let status_description = get_status_description(status);
+
+        local_log!(
+            "Request completed successfully: {} {} -> {} {} bytes ({:?})",
+            method,
+            path,
+            status_description,
+            body_size,
+            duration
+        );
+
+        // Send response back via WebSocket
+        self.send_response(request_id, response).await?;
+
+        // Notify dashboard of successful response
+        let _ = self
+            .app_state
+            .dashboard_tx
+            .send(DashboardEvent::ResponseReceived(status, body_size));
+
+        Ok(())
+    }
+
+    /// Handle error from a local server
+    async fn handle_server_error(
+        &self,
+        request_id: String,
+        method: String,
+        path: String,
+        error: anyhow::Error,
+        duration: std::time::Duration,
+    ) -> Result<()> {
+        // Update error stats
+        {
+            let mut stats = self.stats.write().await;
+            stats.requests_processed += 1;
+            stats.requests_failed += 1;
+            stats.active_requests -= 1;
+        }
+
+        error!(
+            "Local server error: {} {} -> Error: {} ({:?})",
+            method, path, error, duration
+        );
+
+        local_log!(
+            "Sending error response: {} {} -> 502 Bad Gateway (ID: {})",
+            method,
+            path,
+            request_id
+        );
+
+        // Send error response
+        self.send_error_response(
             request_id,
+            502,
+            "Bad Gateway",
+            &format!("Local server error: {}", error),
+        )
+        .await?;
+
+        // Notify dashboard
+        let _ = self
+            .app_state
+            .dashboard_tx
+            .send(DashboardEvent::Error(format!(
+                "Local server error: {}",
+                error
+            )));
+
+        Ok(())
+    }
+
+    /// Handle timeout when the local server doesn't respond
+    async fn handle_timeout_error(
+        &self,
+        request_id: String,
+        method: String,
+        path: String,
+        duration: std::time::Duration,
+    ) -> Result<()> {
+        // Update error stats
+        {
+            let mut stats = self.stats.write().await;
+            stats.requests_processed += 1;
+            stats.requests_failed += 1;
+            stats.active_requests -= 1;
+        }
+
+        error!(
+            "Request timeout: {} {} -> Timeout after {:?}",
+            method, path, duration
+        );
+
+        local_log!(
+            "Sending timeout response: {} {} -> 504 Gateway Timeout (ID: {})",
+            method,
+            path,
+            request_id
+        );
+
+        // Send timeout error response
+        self.send_error_response(
+            request_id,
+            504,
+            "Gateway Timeout",
+            &format!(
+                "Local server did not respond within {:?}",
+                self.app_state.settings.local_server.timeout
+            ),
+        )
+        .await?;
+
+        // Notify dashboard
+        let _ = self
+            .app_state
+            .dashboard_tx
+            .send(DashboardEvent::Error(format!(
+                "Request timeout: {} {}",
+                method, path
+            )));
+
+        Ok(())
+    }
+
+    /// Send a successful response back via WebSocket
+    async fn send_response(&self, request_id: String, response: LocalServerResponse) -> Result<()> {
+        let body_size = response.body.as_ref().map(|b| b.len()).unwrap_or(0);
+        let status_description = get_status_description(response.status);
+
+        crate::proxy_log!(
+            "RESPONSE [{}] {} {} bytes - sending to proxy server",
+            request_id,
+            status_description,
+            body_size
+        );
+
+        // Log response headers for debugging
+        debug!("Response headers: {:?}", response.headers);
+
+        let tunnel_message = crate::websocket::messages::TunnelMessage::http_response(
+            request_id.clone(),
             response.status,
             response.status_text,
             response.headers,
             response.body,
         );
 
-        // Send via WebSocket
+        // Send via WebSocket to a proxy server
         if let Err(e) = self.app_state.websocket_tx.send(tunnel_message) {
-            warn!("Failed to send response to WebSocket: {}", e);
+            warn!("Failed to send a response to WebSocket: {}", e);
+            return Err(anyhow::anyhow!(
+                "Failed to send a response to the proxy server: {}",
+                e
+            ));
         }
 
+        crate::proxy_log!(
+            "Response successfully sent to proxy server [{}]",
+            request_id
+        );
         Ok(())
     }
 
@@ -214,13 +371,25 @@ impl ProxyForwarder {
         status_text: &str,
         error_message: &str,
     ) -> Result<()> {
+        crate::proxy_log!(
+            "Sending error response to proxy server: {} {} - {} (ID: {})",
+            status,
+            status_text,
+            error_message,
+            request_id
+        );
+
         let mut headers = std::collections::HashMap::new();
-        headers.insert("content-type".to_string(), "text/plain".to_string());
+        headers.insert(
+            "content-type".to_string(),
+            "text/plain; charset=utf-8".to_string(),
+        );
+        headers.insert("cache-control".to_string(), "no-cache".to_string());
 
         let body = Some(error_message.as_bytes().to_vec());
 
         let tunnel_message = crate::websocket::messages::TunnelMessage::http_response(
-            request_id,
+            request_id.clone(),
             status,
             status_text.to_string(),
             headers,
@@ -228,8 +397,66 @@ impl ProxyForwarder {
         );
 
         if let Err(e) = self.app_state.websocket_tx.send(tunnel_message) {
-            warn!("Failed to send error response to WebSocket: {}", e);
+            warn!("Failed to send an error response to WebSocket: {}", e);
+            return Err(anyhow::anyhow!(
+                "Failed to send an error response to the proxy server: {}",
+                e
+            ));
         }
+
+        crate::proxy_log!(
+            "Error response successfully sent to the proxy server (ID: {})",
+            request_id
+        );
+        Ok(())
+    }
+
+    /// Handle case where the local server is unreachable
+    async fn handle_connection_error(
+        &self,
+        request_id: String,
+        method: String,
+        path: String,
+        error: anyhow::Error,
+        duration: std::time::Duration,
+    ) -> Result<()> {
+        // Update error stats
+        {
+            let mut stats = self.stats.write().await;
+            stats.requests_processed += 1;
+            stats.requests_failed += 1;
+            stats.active_requests -= 1;
+        }
+
+        error!(
+            "Local server connection failed: {} {} -> Error: {} ({:?})",
+            method, path, error, duration
+        );
+
+        local_log!(
+            "Sending connection error response: {} {} -> 503 Service Unavailable (ID: {})",
+            method,
+            path,
+            request_id
+        );
+
+        // Send service unavailable response
+        self.send_error_response(
+            request_id,
+            503,
+            "Service Unavailable",
+            &format!("Local server is unreachable: {}", error),
+        )
+        .await?;
+
+        // Notify dashboard
+        let _ = self
+            .app_state
+            .dashboard_tx
+            .send(DashboardEvent::Error(format!(
+                "Local server unreachable: {}",
+                error
+            )));
 
         Ok(())
     }
@@ -257,6 +484,32 @@ impl ProxyForwarder {
     pub async fn get_stats(&self) -> ProxyStats {
         self.stats.read().await.clone()
     }
+
+    /// Get detailed proxy statistics with additional metrics
+    pub async fn get_detailed_stats(&self) -> DetailedProxyStats {
+        let stats = self.stats.read().await;
+        let success_rate = if stats.requests_processed > 0 {
+            (stats.requests_successful as f64 / stats.requests_processed as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        DetailedProxyStats {
+            basic_stats: stats.clone(),
+            success_rate_percentage: success_rate,
+            local_server_url: self.app_state.settings.local_server.url.to_string(),
+            timeout_duration: self.app_state.settings.local_server.timeout,
+        }
+    }
+}
+
+/// Detailed proxy statistics
+#[derive(Debug, Clone)]
+pub struct DetailedProxyStats {
+    pub basic_stats: ProxyStats,
+    pub success_rate_percentage: f64,
+    pub local_server_url: String,
+    pub timeout_duration: std::time::Duration,
 }
 
 impl Clone for ProxyForwarder {

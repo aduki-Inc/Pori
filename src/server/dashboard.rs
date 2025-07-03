@@ -23,12 +23,12 @@ pub struct DashboardService {
 }
 
 impl DashboardService {
-    /// Create new dashboard service
+    /// Create a new dashboard service
     pub fn new(app_state: Arc<AppState>) -> Self {
         // Try to load static files, fall back to defaults if needed
         let static_handler = Arc::new(StaticFileHandler::new());
 
-        // If no static files were loaded, we could fall back to defaults
+        // If no static files were loaded, we could fall back to defaults, 
         // but for now we'll just use the empty handler
 
         let api_handler = Arc::new(ApiHandler::new(app_state.clone()));

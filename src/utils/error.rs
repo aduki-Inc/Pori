@@ -47,7 +47,7 @@ pub enum TunnelError {
 }
 
 impl TunnelError {
-    /// Check if error is recoverable (should retry)
+    /// Check if the error is recoverable (should retry)
     pub fn is_recoverable(&self) -> bool {
         match self {
             TunnelError::WebSocketConnection(_) => true,

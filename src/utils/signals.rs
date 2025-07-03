@@ -29,12 +29,12 @@ pub async fn wait_for_shutdown() {
         },
     }
 
-    info!("Starting graceful shutdown...");
+    info!("Starting a graceful shutdown...");
 }
 
 /// Setup signal handlers for graceful shutdown
 pub fn setup_signal_handlers() {
-    // This function can be used to setup additional signal handling
+    // This function can be used to set up additional signal handling
     // if needed in the future
 
     #[cfg(unix)]
@@ -55,6 +55,6 @@ pub fn setup_signal_handlers() {
 /// Force shutdown after timeout
 pub async fn force_shutdown_after(timeout: std::time::Duration) {
     tokio::time::sleep(timeout).await;
-    warn!("Force shutdown timeout reached, terminating process");
+    warn!("Force shutdown timeout reached, terminating a process");
     std::process::exit(1);
 }

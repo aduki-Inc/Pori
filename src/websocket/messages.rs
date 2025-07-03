@@ -16,7 +16,7 @@ pub enum TunnelMessage {
     /// Authentication error
     AuthError { error: String },
 
-    /// HTTP request from cloud to forward to local server
+    /// HTTP request from the cloud to forward to a local server
     HttpRequest {
         id: String,
         method: String,
@@ -25,7 +25,7 @@ pub enum TunnelMessage {
         body: Option<Vec<u8>>,
     },
 
-    /// HTTP response from local server to send back to cloud
+    /// HTTP response from a local server to send back to the cloud
     HttpResponse {
         id: String,
         status: u16,
@@ -62,12 +62,12 @@ pub enum TunnelMessage {
 }
 
 impl TunnelMessage {
-    /// Create authentication message
+    /// Create an authentication message
     pub fn auth(token: String) -> Self {
         Self::Auth { token }
     }
 
-    /// Create successful authentication response
+    /// Create a successful authentication response
     pub fn auth_success(session_id: String) -> Self {
         Self::AuthSuccess { session_id }
     }
@@ -77,7 +77,7 @@ impl TunnelMessage {
         Self::AuthError { error }
     }
 
-    /// Create HTTP request message
+    /// Create an HTTP request message
     pub fn http_request(
         method: String,
         url: String,
@@ -93,7 +93,7 @@ impl TunnelMessage {
         }
     }
 
-    /// Create HTTP request message with specific ID
+    /// Create an HTTP request message with a specific I D
     pub fn http_request_with_id(
         id: String,
         method: String,
@@ -110,7 +110,7 @@ impl TunnelMessage {
         }
     }
 
-    /// Create HTTP response message
+    /// Create an HTTP response message
     pub fn http_response(
         id: String,
         status: u16,
@@ -127,7 +127,7 @@ impl TunnelMessage {
         }
     }
 
-    /// Create error message
+    /// Create an error message
     pub fn error(error: String) -> Self {
         Self::Error {
             request_id: None,
@@ -136,7 +136,7 @@ impl TunnelMessage {
         }
     }
 
-    /// Create error message for specific request
+    /// Create an error message for a specific request
     pub fn error_for_request(request_id: String, error: String, code: Option<u16>) -> Self {
         Self::Error {
             request_id: Some(request_id),
@@ -145,7 +145,7 @@ impl TunnelMessage {
         }
     }
 
-    /// Create ping message
+    /// Create a ping message
     pub fn ping() -> Self {
         Self::Ping {
             timestamp: std::time::SystemTime::now()
@@ -155,12 +155,12 @@ impl TunnelMessage {
         }
     }
 
-    /// Create pong message
+    /// Create a pong message
     pub fn pong(timestamp: u64) -> Self {
         Self::Pong { timestamp }
     }
 
-    /// Create statistics message
+    /// Create a statistics message
     pub fn stats(requests_processed: u64, bytes_transferred: u64, uptime_seconds: u64) -> Self {
         Self::Stats {
             requests_processed,
@@ -169,12 +169,12 @@ impl TunnelMessage {
         }
     }
 
-    /// Create status message
+    /// Create a status message
     pub fn status(status: String, message: Option<String>) -> Self {
         Self::Status { status, message }
     }
 
-    /// Serialize message to JSON
+    /// Serialize a message to JSON
     pub fn to_json(&self) -> Result<String> {
         serde_json::to_string(self).map_err(Into::into)
     }
@@ -184,14 +184,14 @@ impl TunnelMessage {
         serde_json::from_str(json).map_err(Into::into)
     }
 
-    /// Serialize message to binary (MessagePack or similar)
+    /// Serialize a message to binary (MessagePack or similar)
     pub fn to_binary(&self) -> Result<Vec<u8>> {
-        // For now, use JSON as binary format
+        // For now, use JSON as a binary format 
         // In the future, could use MessagePack, CBOR, or Protocol Buffers
         Ok(self.to_json()?.into_bytes())
     }
 
-    /// Deserialize message from binary
+    /// Deserialize a message from a binary
     pub fn from_binary(data: &[u8]) -> Result<Self> {
         let json = String::from_utf8(data.to_vec())?;
         Self::from_json(&json)
@@ -203,8 +203,8 @@ impl TunnelMessage {
             Self::Auth { .. } => "auth",
             Self::AuthSuccess { .. } => "auth_success",
             Self::AuthError { .. } => "auth_error",
-            Self::HttpRequest { .. } => "http_request",
-            Self::HttpResponse { .. } => "http_response",
+            Self::HttpRequest { .. } => "request",
+            Self::HttpResponse { .. } => "response",
             Self::Error { .. } => "error",
             Self::Ping { .. } => "ping",
             Self::Pong { .. } => "pong",
@@ -223,7 +223,7 @@ impl TunnelMessage {
         }
     }
 
-    /// Check if message contains binary data
+    /// Check if a message contains binary data
     pub fn has_binary_data(&self) -> bool {
         match self {
             Self::HttpRequest { body, .. } => body.is_some(),
@@ -284,7 +284,7 @@ mod tests {
             Some(b"test body".to_vec()),
         );
 
-        assert_eq!(message.message_type(), "http_request");
+        assert_eq!(message.message_type(), "request");
         assert!(message.has_binary_data());
         assert_eq!(message.body_size(), 9);
         assert!(!message.is_control_message());

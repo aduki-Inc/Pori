@@ -13,19 +13,19 @@ pub struct ReconnectManager {
 }
 
 impl ReconnectManager {
-    /// Create new reconnection manager with default settings
+    /// Create a new reconnection manager with default settings
     pub fn new() -> Self {
         Self {
             max_attempts: 0, // 0 means infinite attempts
             current_attempt: 0,
             base_delay: Duration::from_secs(1),
-            max_delay: Duration::from_secs(300), // 5 minutes max
+            max_delay: Duration::from_secs(300), // 5-minute max
             backoff_multiplier: 2.0,
             jitter: true,
         }
     }
 
-    /// Set maximum number of attempts (0 = infinite)
+    /// Set the maximum number of attempts (0 = infinite)
     pub fn with_max_attempts(mut self, max_attempts: u32) -> Self {
         self.max_attempts = max_attempts;
         self
@@ -104,12 +104,12 @@ impl ReconnectManager {
     /// Reset counter on successful connection
     pub fn reset(&mut self) {
         if self.current_attempt > 0 {
-            info!("Connection successful, resetting reconnection counter");
+            info!("Connection is successful, resetting reconnection counter");
             self.current_attempt = 0;
         }
     }
 
-    /// Get current attempt number
+    /// Get the current attempt number
     pub fn current_attempt(&self) -> u32 {
         self.current_attempt
     }
@@ -129,7 +129,7 @@ impl ReconnectManager {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
-        // Create pseudo-random jitter based on current time
+        // Create a pseudo-random jitter based on current time
         let mut hasher = DefaultHasher::new();
         std::time::SystemTime::now().hash(&mut hasher);
         let hash = hasher.finish();
@@ -152,7 +152,7 @@ impl Default for ReconnectManager {
 pub enum ReconnectStrategy {
     /// Fixed delay between attempts
     Fixed(Duration),
-    /// Linear backoff with fixed increment
+    /// Linear backoff with a fixed increment
     Linear { base: Duration, increment: Duration },
     /// Exponential backoff with multiplier
     Exponential {
@@ -165,7 +165,7 @@ pub enum ReconnectStrategy {
 }
 
 impl ReconnectStrategy {
-    /// Calculate delay for given attempt number
+    /// Calculate delay for a given attempt number
     pub fn calculate_delay(&self, attempt: u32) -> Duration {
         match self {
             Self::Fixed(delay) => *delay,
@@ -195,7 +195,7 @@ pub struct AdvancedReconnectManager {
 }
 
 impl AdvancedReconnectManager {
-    /// Create new advanced reconnection manager
+    /// Create a new advanced reconnection manager
     pub fn new(strategy: ReconnectStrategy) -> Self {
         Self {
             strategy,
@@ -227,7 +227,7 @@ impl AdvancedReconnectManager {
         // Check minimum interval
         if let Some(last_time) = self.last_attempt_time {
             if last_time.elapsed() < self.min_interval {
-                debug!("Minimum interval not reached, skipping reconnection attempt");
+                debug!("The minimum interval isn't reached, skipping a reconnection attempt");
                 return false;
             }
         }
@@ -248,7 +248,7 @@ impl AdvancedReconnectManager {
         Some(delay)
     }
 
-    /// Reset on successful connection
+    /// Reset on a successful connection
     pub fn reset(&mut self) {
         if self.current_attempt > 0 {
             info!(

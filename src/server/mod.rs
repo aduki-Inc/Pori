@@ -26,12 +26,12 @@ pub async fn run_dashboard_server(
         .parse()
         .context("Invalid dashboard address")?;
 
-    local_log!("Starting dashboard server on http://{}", addr);
+    local_log!("Starting a dashboard server on http://{}", addr);
 
-    // Create dashboard service
+    // Create a dashboard service
     let service = Arc::new(DashboardService::new(app_state.clone()));
 
-    // Start event handler task
+    // Start an event handler task
     let event_task = {
         let service = service.clone();
         tokio::spawn(async move {
@@ -45,7 +45,7 @@ pub async fn run_dashboard_server(
     // Create TCP listener
     let listener = TcpListener::bind(addr)
         .await
-        .context("Failed to bind to dashboard address")?;
+        .context("Failed to bind to the dashboard address")?;
 
     local_log!("Dashboard server listening on http://{}", addr);
 

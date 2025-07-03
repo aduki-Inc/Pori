@@ -23,7 +23,7 @@ pub struct WebSocketClient {
 }
 
 impl WebSocketClient {
-    /// Create new WebSocket client
+    /// Create a new WebSocket client
     pub fn new(app_state: Arc<AppState>) -> Result<Self> {
         let tunnel_handler = Arc::new(TunnelHandler::new(app_state.clone()));
 
@@ -98,7 +98,7 @@ impl WebSocketClient {
                     };
 
                     if delay > Duration::from_secs(0) {
-                        info!("Waiting {:?} before reconnection attempt", delay);
+                        info!("Waiting {:?} Before reconnection attempt", delay);
 
                         // Update status to reconnecting
                         let _ = self
@@ -132,9 +132,10 @@ impl WebSocketClient {
     async fn connect_and_run(&self) -> Result<()> {
         // Build URL with token query parameter
         let mut connection_url = self.app_state.settings.websocket.url.clone();
-        connection_url.query_pairs_mut()
+        connection_url
+            .query_pairs_mut()
             .append_pair("token", &self.app_state.settings.websocket.token);
-        
+
         proxy_log!(
             "Attempting WebSocket connection to {}",
             self.app_state.settings.websocket.url
@@ -147,7 +148,7 @@ impl WebSocketClient {
         )
         .await
         .context("Connection timeout")?
-        .context("Failed to connect to WebSocket server")?;
+        .context("Failed to connect to the WebSocket server")?;
 
         proxy_log!(
             "WebSocket connected, response status: {}",
@@ -157,7 +158,7 @@ impl WebSocketClient {
         // Split stream for concurrent read/write
         let (mut ws_sink, mut ws_stream) = ws_stream.split();
 
-        // Create channel for outbound messages
+        // Create a channel for outbound messages
         let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel::<TunnelMessage>();
 
         // Store the sender for external use
@@ -166,30 +167,13 @@ impl WebSocketClient {
             *tx_guard = Some(outbound_tx);
         }
 
-        // Since we're authenticating via query parameter, no need to send auth message
+        // Since we're authenticating via query parameter, no need to send an auth message
         proxy_log!("WebSocket authenticated via token query parameter");
 
-        // Setup ping task
-        let ping_task = {
-            let outbound_tx = self.outbound_tx.clone();
-            let ping_interval = self.app_state.settings.websocket.ping_interval;
-
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(ping_interval);
-                interval.tick().await; // Skip first tick
-
-                loop {
-                    interval.tick().await;
-
-                    let ping_message = TunnelHandler::create_ping_message();
-                    if let Some(ref tx) = *outbound_tx.lock().await {
-                        if tx.send(ping_message).is_err() {
-                            break;
-                        }
-                    }
-                }
-            })
-        };
+        // Ping task disabled - no automatic pings sent
+        let _ping_task = tokio::spawn(async move {
+            // Empty task - ping functionality removed to prevent "Unknown message type" errors
+        });
 
         // Process queued messages
         self.send_queued_messages().await?;
@@ -235,7 +219,7 @@ impl WebSocketClient {
         }
 
         // Cleanup
-        ping_task.abort();
+        _ping_task.abort();
 
         // Clear outbound sender
         {
@@ -251,12 +235,14 @@ impl WebSocketClient {
     async fn handle_incoming_message(&self, message: Message) -> Result<()> {
         match message {
             Message::Text(text) => {
-                debug!("Received text message: {}", text);
+                debug!("Received a text message: {}", text);
 
-                // Try to parse as tunnel message first
+                // Try to parse as a tunnel message first
                 match TunnelMessage::from_json(&text) {
                     Ok(tunnel_message) => {
-                        if let Some(response) = self.tunnel_handler.handle_message(tunnel_message).await? {
+                        if let Some(response) =
+                            self.tunnel_handler.handle_message(tunnel_message).await?
+                        {
                             self.send_message(response).await?;
                         }
                     }
@@ -266,40 +252,49 @@ impl WebSocketClient {
                             if let Some(msg_type) = value.get("type").and_then(|v| v.as_str()) {
                                 match msg_type {
                                     "auth" => {
-                                        if let Some(status) = value.get("status").and_then(|v| v.as_str()) {
+                                        if let Some(status) =
+                                            value.get("status").and_then(|v| v.as_str())
+                                        {
                                             proxy_log!("Authentication status: {}", status);
                                             if status == "authenticated" {
                                                 // Update connection status to connected
                                                 let _ = self.app_state.dashboard_tx.send(
-                                                    DashboardEvent::ConnectionStatus(ConnectionStatus::Connected)
+                                                    DashboardEvent::ConnectionStatus(
+                                                        ConnectionStatus::Connected,
+                                                    ),
                                                 );
                                             }
                                         }
                                     }
                                     "error" => {
-                                        if let Some(error_msg) = value.get("message").and_then(|v| v.as_str()) {
+                                        if let Some(error_msg) =
+                                            value.get("message").and_then(|v| v.as_str())
+                                        {
                                             warn!("Server error: {}", error_msg);
                                         }
                                     }
                                     _ => {
-                                        debug!("Received unhandled server message type: {}", msg_type);
+                                        debug!(
+                                            "Received unhandled server message type: {}",
+                                            msg_type
+                                        );
                                     }
                                 }
                             } else {
-                                debug!("Received non-tunnel message: {}", text);
+                                debug!("Received a non-tunnel message: {}", text);
                             }
                         } else {
-                            warn!("Received unparseable text message: {}", text);
+                            warn!("Received an unparseable text message: {}", text);
                         }
                     }
                 }
             }
 
             Message::Binary(data) => {
-                debug!("Received binary message ({} bytes)", data.len());
+                debug!("Received a binary message ({} bytes)", data.len());
 
                 let tunnel_message = TunnelMessage::from_binary(&data)
-                    .context("Failed to parse binary tunnel message")?;
+                    .context("Failed to parse a binary tunnel message")?;
 
                 if let Some(response) = self.tunnel_handler.handle_message(tunnel_message).await? {
                     self.send_message(response).await?;
@@ -321,14 +316,14 @@ impl WebSocketClient {
             }
 
             Message::Frame(_) => {
-                warn!("Received unexpected frame message");
+                warn!("Received an unexpected frame message");
             }
         }
 
         Ok(())
     }
 
-    /// Send message to WebSocket stream
+    /// Send a message to the WebSocket stream
     async fn send_message_to_stream(
         &self,
         ws_sink: &mut futures_util::stream::SplitSink<WsStream, Message>,
@@ -345,20 +340,20 @@ impl WebSocketClient {
         ws_sink
             .send(ws_message)
             .await
-            .context("Failed to send message to WebSocket")?;
+            .context("Failed to send a message to WebSocket")?;
 
         debug!("Sent {} message", message.message_type());
         Ok(())
     }
 
-    /// Send message via WebSocket (queue if not connected)
+    /// Send a message via WebSocket (queue if not connected)
     pub async fn send_message(&self, message: TunnelMessage) -> Result<()> {
         let tx_guard = self.outbound_tx.lock().await;
 
         if let Some(ref tx) = *tx_guard {
             // Connection is active, send immediately
             tx.send(message)
-                .map_err(|_| anyhow::anyhow!("Failed to send message: channel closed"))?;
+                .map_err(|_| anyhow::anyhow!("Failed to send a message: a channel closed"))?;
         } else {
             // Connection is not active, queue the message
             debug!(
@@ -372,7 +367,7 @@ impl WebSocketClient {
         Ok(())
     }
 
-    /// Send queued messages when connection is established
+    /// Send queued messages when a connection is established
     async fn send_queued_messages(&self) -> Result<()> {
         let mut queue = self.message_queue.lock().await;
         let queued_count = queue.len();
@@ -384,7 +379,7 @@ impl WebSocketClient {
             if let Some(ref tx) = *tx_guard {
                 for message in queue.drain(..) {
                     if let Err(e) = tx.send(message) {
-                        error!("Failed to send queued message: {}", e);
+                        error!("Failed to send a queued message: {}", e);
                         break;
                     }
                 }

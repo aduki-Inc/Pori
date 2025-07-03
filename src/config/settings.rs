@@ -268,14 +268,14 @@ impl AppSettings {
         })
     }
 
-    /// Load configuration from specified file
+    /// Load configuration from a specified file
     fn load_config_file(path: &str) -> Result<ConfigFile> {
         let content = std::fs::read_to_string(path)
-            .with_context(|| format!("Failed to read config file: {path}"))?;
+            .with_context(|| format!("Failed to read a config file: {path}"))?;
 
         if path.ends_with(".toml") {
             toml::from_str(&content)
-                .with_context(|| format!("Failed to parse TOML config file: {path}"))
+                .with_context(|| format!("Failed to parse a TOML config file: {path}"))
         } else if path.ends_with(".json") {
             serde_json::from_str(&content)
                 .with_context(|| format!("Failed to parse JSON config file: {path}"))
@@ -288,7 +288,7 @@ impl AppSettings {
                 .or_else(|_| toml::from_str(&content))
                 .or_else(|_| serde_json::from_str(&content))
                 .with_context(|| {
-                    format!("Failed to parse config file (tried YAML, TOML, and JSON): {path}")
+                    format!("Failed to parse a config file (tried YAML, TOML, and JSON): {path}")
                 })
         }
     }

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 /// Messages for proxy communication
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProxyMessage {
-    /// HTTP request to forward to local server
+    /// HTTP request to forward to a local server
     HttpRequest {
         id: String,
         method: String,
@@ -13,7 +13,7 @@ pub enum ProxyMessage {
         body: Option<Vec<u8>>,
     },
 
-    /// HTTP response from local server
+    /// HTTP response from a local server
     HttpResponse {
         id: String,
         status: u16,
@@ -39,7 +39,7 @@ pub enum ProxyMessage {
 }
 
 impl ProxyMessage {
-    /// Create HTTP request message
+    /// Create an HTTP request message
     pub fn http_request(
         id: String,
         method: String,
@@ -56,7 +56,7 @@ impl ProxyMessage {
         }
     }
 
-    /// Create HTTP response message
+    /// Create an HTTP response message
     pub fn http_response(
         id: String,
         status: u16,
@@ -73,7 +73,7 @@ impl ProxyMessage {
         }
     }
 
-    /// Create error message
+    /// Create an error message
     pub fn error(id: String, error: String, status_code: Option<u16>) -> Self {
         Self::Error {
             id,
@@ -82,7 +82,7 @@ impl ProxyMessage {
         }
     }
 
-    /// Create stats message
+    /// Create a stat message
     pub fn stats(
         requests_processed: u64,
         requests_successful: u64,
@@ -110,14 +110,14 @@ impl ProxyMessage {
     /// Get message type
     pub fn message_type(&self) -> &'static str {
         match self {
-            Self::HttpRequest { .. } => "http_request",
-            Self::HttpResponse { .. } => "http_response",
+            Self::HttpRequest { .. } => "request",
+            Self::HttpResponse { .. } => "response",
             Self::Error { .. } => "error",
             Self::Stats { .. } => "stats",
         }
     }
 
-    /// Check if message has body data
+    /// Check if a message has body data
     pub fn has_body(&self) -> bool {
         match self {
             Self::HttpRequest { body, .. } => body.is_some(),

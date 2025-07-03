@@ -13,7 +13,7 @@ pub struct LocalServerClient {
     timeout: Duration,
 }
 
-/// Response from local server
+/// Response from a local server
 #[derive(Debug)]
 pub struct LocalServerResponse {
     pub status: u16,
@@ -23,7 +23,7 @@ pub struct LocalServerResponse {
 }
 
 impl LocalServerClient {
-    /// Create new local server client
+    /// Create a new local server client
     pub fn new(base_url: Url, timeout: Duration, verify_ssl: bool) -> Result<Self> {
         let client = ClientBuilder::new()
             .timeout(timeout)
@@ -34,7 +34,7 @@ impl LocalServerClient {
             .tcp_keepalive(Duration::from_secs(30))
             .http2_prior_knowledge()
             .build()
-            .context("Failed to create HTTP client")?;
+            .context("Failed to create an HTTP client")?;
 
         Ok(Self {
             client,
@@ -53,7 +53,7 @@ impl LocalServerClient {
     ) -> Result<LocalServerResponse> {
         let url = self.build_url(path)?;
 
-        debug!("Forwarding {} {} to local server", method, url);
+        debug!("Forwarding {} {} to a local server", method, url);
 
         // Build request
         let mut request_builder = self
@@ -77,7 +77,7 @@ impl LocalServerClient {
         let response = request_builder
             .send()
             .await
-            .context("Failed to send request to local server")?;
+            .context("Failed to send a request to a local server")?;
 
         let duration = start_time.elapsed();
         let status = response.status();
@@ -93,7 +93,7 @@ impl LocalServerClient {
         Ok(local_response)
     }
 
-    /// Build target URL from path
+    /// Build target URL from a path
     fn build_url(&self, path: &str) -> Result<Url> {
         let path = if let Some(stripped) = path.strip_prefix('/') {
             stripped
@@ -125,7 +125,7 @@ impl LocalServerClient {
         let body_bytes = response
             .bytes()
             .await
-            .context("Failed to read response body")?;
+            .context("Failed to read the response body")?;
 
         let body = if body_bytes.is_empty() {
             None
@@ -141,7 +141,7 @@ impl LocalServerClient {
         })
     }
 
-    /// Check if header should be skipped when forwarding requests
+    /// Check if the header should be skipped when forwarding requests
     fn should_skip_header(&self, header_name: &str) -> bool {
         let header_lower = header_name.to_lowercase();
         matches!(
@@ -157,7 +157,7 @@ impl LocalServerClient {
         )
     }
 
-    /// Check if response header should be skipped
+    /// Check if the response header should be skipped
     fn should_skip_response_header(&self, header_name: &str) -> bool {
         let header_lower = header_name.to_lowercase();
         matches!(

@@ -50,11 +50,11 @@ pub struct CliArgs {
     #[arg(long, default_value_t = 0)]
     pub max_reconnects: u32,
 
-    /// Verify SSL certificates for local server
+    /// Verify SSL certificates for a local server
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub verify_ssl: bool,
 
-    /// Maximum connections to local server
+    /// Maximum connections to a local server
     #[arg(long, default_value_t = 10)]
     pub max_connections: usize,
 }
@@ -142,7 +142,7 @@ impl CliArgs {
                 .map(|h| h.to_string())
                 .context("WebSocket URL must have a valid host")
         } else {
-            anyhow::bail!("WebSocket URL not configured")
+            anyhow::bail!("WebSocket URL isn't configured")
         }
     }
 

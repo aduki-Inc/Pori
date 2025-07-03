@@ -108,7 +108,7 @@ pub async fn run_application(settings: AppSettings) -> Result<()> {
 
     // Start application components concurrently
     let dashboard_task = if !app_state.settings.no_dashboard {
-        local_log!("Starting dashboard server on port {}", app_state.settings.dashboard.port);
+        local_log!("Starting a dashboard server on port {}", app_state.settings.dashboard.port);
         Some(tokio::spawn({
             let state = app_state.clone();
             async move {
@@ -145,7 +145,7 @@ pub async fn run_application(settings: AppSettings) -> Result<()> {
 
     info!("All components started successfully - Pori is ready!");
 
-    // Wait for shutdown signal
+    // Wait for a shutdown signal
     let shutdown_task = tokio::spawn(async {
         utils::signals::wait_for_shutdown().await;
         info!("Shutdown signal received");

@@ -15,7 +15,7 @@ pub struct ApiHandler {
 }
 
 impl ApiHandler {
-    /// Create new API handler
+    /// Create a new API handler
     pub fn new(app_state: Arc<AppState>) -> Self {
         Self { app_state }
     }
@@ -160,7 +160,7 @@ impl ApiHandler {
                 {
                     "path": "/api/endpoints",
                     "method": "GET",
-                    "description": "Get list of available endpoints (this endpoint)"
+                    "description": "Get a list of available endpoints (this endpoint)"
                 },
                 {
                     "path": "/api/reconnect",
@@ -170,7 +170,7 @@ impl ApiHandler {
                 {
                     "path": "/api/shutdown",
                     "method": "POST", 
-                    "description": "Initiate graceful shutdown"
+                    "description": "Initiate a graceful shutdown"
                 }
             ]
         });
