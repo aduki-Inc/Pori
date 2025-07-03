@@ -203,8 +203,8 @@ impl TunnelMessage {
             Self::Auth { .. } => "auth",
             Self::AuthSuccess { .. } => "auth_success",
             Self::AuthError { .. } => "auth_error",
-            Self::HttpRequest { .. } => "http_request",
-            Self::HttpResponse { .. } => "http_response",
+            Self::HttpRequest { .. } => "request",
+            Self::HttpResponse { .. } => "response",
             Self::Error { .. } => "error",
             Self::Ping { .. } => "ping",
             Self::Pong { .. } => "pong",
@@ -284,7 +284,7 @@ mod tests {
             Some(b"test body".to_vec()),
         );
 
-        assert_eq!(message.message_type(), "http_request");
+        assert_eq!(message.message_type(), "request");
         assert!(message.has_binary_data());
         assert_eq!(message.body_size(), 9);
         assert!(!message.is_control_message());

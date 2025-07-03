@@ -132,9 +132,10 @@ impl WebSocketClient {
     async fn connect_and_run(&self) -> Result<()> {
         // Build URL with token query parameter
         let mut connection_url = self.app_state.settings.websocket.url.clone();
-        connection_url.query_pairs_mut()
+        connection_url
+            .query_pairs_mut()
             .append_pair("token", &self.app_state.settings.websocket.token);
-        
+
         proxy_log!(
             "Attempting WebSocket connection to {}",
             self.app_state.settings.websocket.url
@@ -169,27 +170,10 @@ impl WebSocketClient {
         // Since we're authenticating via query parameter, no need to send auth message
         proxy_log!("WebSocket authenticated via token query parameter");
 
-        // Setup ping task
-        let ping_task = {
-            let outbound_tx = self.outbound_tx.clone();
-            let ping_interval = self.app_state.settings.websocket.ping_interval;
-
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(ping_interval);
-                interval.tick().await; // Skip first tick
-
-                loop {
-                    interval.tick().await;
-
-                    let ping_message = TunnelHandler::create_ping_message();
-                    if let Some(ref tx) = *outbound_tx.lock().await {
-                        if tx.send(ping_message).is_err() {
-                            break;
-                        }
-                    }
-                }
-            })
-        };
+        // Ping task disabled - no automatic pings sent
+        let _ping_task = tokio::spawn(async move {
+            // Empty task - ping functionality removed to prevent "Unknown message type" errors
+        });
 
         // Process queued messages
         self.send_queued_messages().await?;
@@ -235,7 +219,7 @@ impl WebSocketClient {
         }
 
         // Cleanup
-        ping_task.abort();
+        _ping_task.abort();
 
         // Clear outbound sender
         {
@@ -256,7 +240,9 @@ impl WebSocketClient {
                 // Try to parse as tunnel message first
                 match TunnelMessage::from_json(&text) {
                     Ok(tunnel_message) => {
-                        if let Some(response) = self.tunnel_handler.handle_message(tunnel_message).await? {
+                        if let Some(response) =
+                            self.tunnel_handler.handle_message(tunnel_message).await?
+                        {
                             self.send_message(response).await?;
                         }
                     }
@@ -266,23 +252,32 @@ impl WebSocketClient {
                             if let Some(msg_type) = value.get("type").and_then(|v| v.as_str()) {
                                 match msg_type {
                                     "auth" => {
-                                        if let Some(status) = value.get("status").and_then(|v| v.as_str()) {
+                                        if let Some(status) =
+                                            value.get("status").and_then(|v| v.as_str())
+                                        {
                                             proxy_log!("Authentication status: {}", status);
                                             if status == "authenticated" {
                                                 // Update connection status to connected
                                                 let _ = self.app_state.dashboard_tx.send(
-                                                    DashboardEvent::ConnectionStatus(ConnectionStatus::Connected)
+                                                    DashboardEvent::ConnectionStatus(
+                                                        ConnectionStatus::Connected,
+                                                    ),
                                                 );
                                             }
                                         }
                                     }
                                     "error" => {
-                                        if let Some(error_msg) = value.get("message").and_then(|v| v.as_str()) {
+                                        if let Some(error_msg) =
+                                            value.get("message").and_then(|v| v.as_str())
+                                        {
                                             warn!("Server error: {}", error_msg);
                                         }
                                     }
                                     _ => {
-                                        debug!("Received unhandled server message type: {}", msg_type);
+                                        debug!(
+                                            "Received unhandled server message type: {}",
+                                            msg_type
+                                        );
                                     }
                                 }
                             } else {

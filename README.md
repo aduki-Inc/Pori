@@ -86,7 +86,7 @@ Install Pori globally like ngrok - accessible from anywhere in your terminal:
 curl -fsSL https://raw.githubusercontent.com/aduki-Inc/Proxy/main/release/install.sh | bash
 ```
 
-After installation, simply run:
+After installation, run:
 
 ```bash
 pori --url wss://proxy.example.com --token your-token

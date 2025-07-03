@@ -110,8 +110,8 @@ impl ProxyMessage {
     /// Get message type
     pub fn message_type(&self) -> &'static str {
         match self {
-            Self::HttpRequest { .. } => "http_request",
-            Self::HttpResponse { .. } => "http_response",
+            Self::HttpRequest { .. } => "request",
+            Self::HttpResponse { .. } => "response",
             Self::Error { .. } => "error",
             Self::Stats { .. } => "stats",
         }

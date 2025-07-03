@@ -1,6 +1,7 @@
 use super::messages::TunnelMessage;
-use crate::{AppState, ConnectionStatus, DashboardEvent};
+use crate::{utils::http::get_status_description, AppState, ConnectionStatus, DashboardEvent};
 use anyhow::Result;
+use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, info, instrument, warn};
@@ -21,7 +22,7 @@ impl TunnelHandler {
         match message {
             TunnelMessage::Auth { .. } => {
                 // Client should not receive auth messages
-                warn!("Received unexpected auth message");
+                warn!("Received an unexpected auth message");
                 Ok(None)
             }
 
@@ -57,7 +58,7 @@ impl TunnelHandler {
                         error.clone(),
                     )));
 
-                // Return error for client to handle
+                // Return error for a client to handle
                 Err(anyhow::anyhow!("Authentication failed: {}", error))
             }
 
@@ -68,9 +69,22 @@ impl TunnelHandler {
                 headers,
                 body,
             } => {
-                debug!("Received HTTP request: {} {} (ID: {})", method, url, id);
+                // Parse URL to extract path and query parameters
+                let (path, _query_params) = self.parse_url_components(&url);
+                let body_size = body.as_ref().map(|b| b.len()).unwrap_or(0);
 
-                // Forward to proxy component
+                // Also log in simple format for quick reading
+                crate::proxy_log!(
+                    "REQUEST [{}] {} {} (Body: {} bytes)",
+                    id,
+                    method,
+                    path,
+                    body_size
+                );
+
+                debug!("Request headers: {:?}", headers);
+
+                // Forward to a proxy component
                 let proxy_message = crate::proxy::messages::ProxyMessage::HttpRequest {
                     id: id.clone(),
                     method: method.clone(),
@@ -80,7 +94,10 @@ impl TunnelHandler {
                 };
 
                 if let Err(e) = self.app_state.proxy_tx.send(proxy_message) {
-                    error!("Failed to forward HTTP request to proxy: {}", e);
+                    error!("Failed to forward an HTTP request to proxy: {}", e);
+
+                    // Log error response
+                    self.log_response(&id, 500, "Internal Server Error", "Internal proxy error");
 
                     // Send error response
                     return Ok(Some(TunnelMessage::error_for_request(
@@ -94,7 +111,7 @@ impl TunnelHandler {
                 let _ = self
                     .app_state
                     .dashboard_tx
-                    .send(DashboardEvent::RequestForwarded(format!("{method} {url}")));
+                    .send(DashboardEvent::RequestForwarded(format!("{method} {path}")));
 
                 // Update stats
                 self.app_state
@@ -103,12 +120,19 @@ impl TunnelHandler {
                     })
                     .await;
 
+                crate::proxy_log!(
+                    "Request forwarded to local server: {} {} [{}]",
+                    method,
+                    path,
+                    id
+                );
+
                 Ok(None)
             }
 
             TunnelMessage::HttpResponse { .. } => {
                 // Client should not receive HTTP responses
-                warn!("Received unexpected HTTP response message");
+                warn!("Received an unexpected HTTP response message");
                 Ok(None)
             }
 
@@ -139,28 +163,21 @@ impl TunnelHandler {
                 Ok(None)
             }
 
-            TunnelMessage::Ping { timestamp } => {
-                debug!("Received ping with timestamp: {}", timestamp);
-
-                // Respond with pong
-                Ok(Some(TunnelMessage::pong(timestamp)))
+            TunnelMessage::Ping { timestamp: _ } => {
+                // Server doesn't expect ping messages, ignore them
+                debug!("Ignoring ping message - server doesn't support pings");
+                Ok(None)
             }
 
-            TunnelMessage::Pong { timestamp } => {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-
-                let latency = now.saturating_sub(timestamp);
-                debug!("Received pong, latency: {}s", latency);
-
+            TunnelMessage::Pong { timestamp: _ } => {
+                // Server doesn't expect pong messages, ignore them
+                debug!("Ignoring pong message - server doesn't support pongs");
                 Ok(None)
             }
 
             TunnelMessage::Stats { .. } => {
-                // Client should not receive stats messages
-                warn!("Received unexpected stats message");
+                // Client should not receive stat messages
+                warn!("Received an unexpected stats message");
                 Ok(None)
             }
 
@@ -180,17 +197,12 @@ impl TunnelHandler {
         }
     }
 
-    /// Create authentication message for initial connection
+    /// Create an authentication message for the initial connection
     pub fn create_auth_message(&self) -> TunnelMessage {
         TunnelMessage::auth(self.app_state.settings.websocket.token.clone())
     }
 
-    /// Create periodic ping message
-    pub fn create_ping_message() -> TunnelMessage {
-        TunnelMessage::ping()
-    }
-
-    /// Create statistics message
+    /// Create a statistics message
     pub async fn create_stats_message(&self) -> TunnelMessage {
         let stats = self.app_state.get_stats().await;
         TunnelMessage::stats(
@@ -209,7 +221,7 @@ impl TunnelHandler {
         headers: HashMap<String, String>,
         body: Option<Vec<u8>>,
     ) -> TunnelMessage {
-        debug!("Creating HTTP response for request ID: {}", request_id);
+        debug!("Creating an HTTP response for request ID: {}", request_id);
 
         // Notify dashboard
         let body_size = body.as_ref().map(|b| b.len()).unwrap_or(0);
@@ -285,7 +297,7 @@ impl TunnelHandler {
 
             // Check for invalid characters in header names
             if !name.chars().all(|c| c.is_ascii() && !c.is_control()) {
-                anyhow::bail!("Invalid characters in header name: {}", name);
+                anyhow::bail!("Invalid characters in the header name: {}", name);
             }
 
             // Check header value
@@ -308,7 +320,7 @@ impl TunnelHandler {
             .collect()
     }
 
-    /// Check if header should be skipped during forwarding
+    /// Check if the header should be skipped during forwarding
     fn should_skip_header(&self, header_name: &str) -> bool {
         let header_lower = header_name.to_lowercase();
         matches!(
@@ -322,6 +334,76 @@ impl TunnelHandler {
                 | "transfer-encoding"
                 | "host"
         )
+    }
+
+    /// Parse URL components to extract path and query parameters
+    fn parse_url_components(&self, url: &str) -> (String, HashMap<String, String>) {
+        let mut query_params = HashMap::new();
+
+        if url.starts_with('/') {
+            // Already a path, check for query parameters
+            if let Some(query_start) = url.find('?') {
+                let path = url[..query_start].to_string();
+                let query_string = &url[query_start + 1..];
+
+                // Parse query parameters
+                for pair in query_string.split('&') {
+                    if let Some(eq_pos) = pair.find('=') {
+                        let key = pair[..eq_pos].to_string();
+                        let value = pair[eq_pos + 1..].to_string();
+                        query_params.insert(key, value);
+                    } else if !pair.is_empty() {
+                        query_params.insert(pair.to_string(), String::new());
+                    }
+                }
+
+                (path, query_params)
+            } else {
+                (url.to_string(), query_params)
+            }
+        } else if let Ok(parsed_url) = url::Url::parse(url) {
+            // Full URL, extract path and query
+            let path = parsed_url.path().to_string();
+
+            // Parse query parameters
+            for (key, value) in parsed_url.query_pairs() {
+                query_params.insert(key.to_string(), value.to_string());
+            }
+
+            (path, query_params)
+        } else {
+            // Assume it's a relative path
+            let normalized_path = format!("/{}", url.trim_start_matches('/'));
+            (normalized_path, query_params)
+        }
+    }
+
+    /// Log HTTP response in structured format
+    fn log_response(&self, request_id: &str, status_code: u16, status_text: &str, details: &str) {
+        let status_description = get_status_description(status_code);
+
+        crate::proxy_log!(
+            "RESPONSE [{}] {} - {}",
+            request_id,
+            status_description,
+            details
+        );
+
+        let response_log = json!({
+            "type": "response",
+            "requestId": request_id,
+            "status": status_code,
+            "statusText": status_text,
+            "statusDescription": status_description,
+            "details": details,
+            "timestamp": chrono::Utc::now().to_rfc3339()
+        });
+
+        crate::proxy_log!(
+            "Outgoing Response: {}",
+            serde_json::to_string(&response_log)
+                .unwrap_or_else(|_| "Failed to serialize response log".to_string())
+        );
     }
 }
 
@@ -365,14 +447,16 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert!(response.is_some());
-            if let Some(TunnelMessage::Pong {
-                timestamp: response_timestamp,
-            }) = response
-            {
-                assert_eq!(response_timestamp, timestamp);
-            }
+            // Ping messages are now ignored (no response expected)
+            assert!(response.is_none());
         }
+
+        // Test pong handling too
+        let pong_message = TunnelMessage::pong(123456);
+        let response = handler.handle_message(pong_message).await.unwrap();
+
+        // Pong messages are also ignored (no response expected)
+        assert!(response.is_none());
     }
 
     #[test]
