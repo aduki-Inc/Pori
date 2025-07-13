@@ -19,10 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed method chaining formatting in WebSocket message compression handling
   - Resolved all CI/CD formatting check failures that were blocking releases
 
+- **Code Quality Improvements**
+  - Fixed clippy warnings for uninlined format arguments across multiple modules
+  - Replaced manual `Default` implementations with `#[derive(Default)]` for better maintainability
+  - Fixed needless borrows in WebSocket tunnel module
+  - Updated format strings to use inline argument syntax for better performance
+  - Enhanced error message formatting in proxy forwarder module
+
 - **Build System**
   - Ensured clean compilation with no formatting warnings
   - Updated build target files to reflect version 0.1.4
   - Validated release build process works correctly
+  - All 43 unit tests passing successfully
 
 ### Changed
 
@@ -31,13 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improved import organization following Rust style guidelines
   - Standardized macro usage formatting for better maintainability
   - Updated CI/CD pipeline compliance to prevent future formatting issues
+  - Optimized struct implementations using derive macros where appropriate
 
 ### Technical Details
 
 - All source files now pass `cargo fmt --all -- --check` validation
+- All clippy warnings resolved with `cargo clippy --all-targets --all-features -- -D warnings`
 - Import statements reorganized to follow `use crate::` before external crates pattern
 - Multi-line function calls properly formatted with appropriate indentation
 - Method chaining now follows consistent line-breaking rules
+- Derivable trait implementations replaced with derive attributes
 
 ## [0.1.3] - 2025-07-01
 

@@ -55,7 +55,7 @@ pub struct CompressionInfo {
 }
 
 /// WebSocket configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WebSocketConfig {
     /// Connection settings
     pub connection: WebSocketConnectionConfig,
@@ -171,7 +171,7 @@ pub struct WebSocketRateLimitConfig {
 }
 
 /// WebSocket extension configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WebSocketExtensionConfig {
     /// Per-message deflate settings
     pub deflate: DeflateConfig,
@@ -368,17 +368,6 @@ impl WebSocketMessage {
     }
 }
 
-impl Default for WebSocketConfig {
-    fn default() -> Self {
-        Self {
-            connection: WebSocketConnectionConfig::default(),
-            message: WebSocketMessageConfig::default(),
-            security: WebSocketSecurityConfig::default(),
-            extensions: WebSocketExtensionConfig::default(),
-        }
-    }
-}
-
 impl Default for WebSocketConnectionConfig {
     fn default() -> Self {
         Self {
@@ -458,15 +447,6 @@ impl Default for WebSocketRateLimitConfig {
             burst_size: 10,
             bytes_per_second: 1024 * 1024,
             window_size: 60,
-        }
-    }
-}
-
-impl Default for WebSocketExtensionConfig {
-    fn default() -> Self {
-        Self {
-            deflate: DeflateConfig::default(),
-            custom: HashMap::new(),
         }
     }
 }

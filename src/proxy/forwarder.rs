@@ -298,7 +298,7 @@ impl ProxyForwarder {
             request_id,
             502,
             "Bad Gateway",
-            &format!("Local server error: {}", error),
+            &format!("Local server error: {error}"),
             cloud_request_id,
         )
         .await?;
@@ -308,8 +308,7 @@ impl ProxyForwarder {
             .app_state
             .dashboard_tx
             .send(DashboardEvent::Error(format!(
-                "Local server error: {}",
-                error
+                "Local server error: {error}"
             )));
 
         Ok(())
@@ -362,8 +361,7 @@ impl ProxyForwarder {
             .app_state
             .dashboard_tx
             .send(DashboardEvent::Error(format!(
-                "Request timeout: {} {}",
-                method, path
+                "Request timeout: {method} {path}"
             )));
 
         Ok(())
@@ -444,7 +442,7 @@ impl ProxyForwarder {
             r#"<!DOCTYPE html>
 <html>
 <head>
-    <title>{} {}</title>
+    <title>{status} {status_text}</title>
     <style>
         body {{ font-family: Arial, sans-serif; margin: 40px; }}
         h1 {{ color: #d32f2f; }}
@@ -453,12 +451,11 @@ impl ProxyForwarder {
     </style>
 </head>
 <body>
-    <h1>Error {}</h1>
-    <div class="error-code">{} {}</div>
-    <div class="error-message">{}</div>
+    <h1>Error {status}</h1>
+    <div class="error-code">{status} {status_text}</div>
+    <div class="error-message">{error_message}</div>
 </body>
-</html>"#,
-            status, status_text, status, status, status_text, error_message
+</html>"#
         );
 
         let body = Some(html_body.as_bytes().to_vec());
@@ -523,7 +520,7 @@ impl ProxyForwarder {
             request_id,
             503,
             "Service Unavailable",
-            &format!("Local server is unreachable: {}", error),
+            &format!("Local server is unreachable: {error}"),
             cloud_request_id,
         )
         .await?;
@@ -533,8 +530,7 @@ impl ProxyForwarder {
             .app_state
             .dashboard_tx
             .send(DashboardEvent::Error(format!(
-                "Local server unreachable: {}",
-                error
+                "Local server unreachable: {error}"
             )));
 
         Ok(())

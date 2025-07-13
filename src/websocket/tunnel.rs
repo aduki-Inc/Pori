@@ -117,7 +117,7 @@ impl TunnelHandler {
 
                             // Log error response
                             self.log_response(
-                                &message_id,
+                                message_id,
                                 500,
                                 "Internal Server Error",
                                 "Internal proxy error",

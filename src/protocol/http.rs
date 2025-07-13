@@ -62,7 +62,7 @@ pub struct RequestTiming {
 }
 
 /// HTTP request configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HttpRequestConfig {
     /// Timeout settings
     pub timeouts: HttpTimeouts,
@@ -124,7 +124,7 @@ pub struct HttpCacheConfig {
 }
 
 /// HTTP connection configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HttpConnectionConfig {
     /// Connection pool settings
     pub pool: ConnectionPoolConfig,
@@ -167,7 +167,7 @@ pub struct HttpTlsConfig {
 }
 
 /// HTTP proxy configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HttpProxyConfig {
     /// Proxy URL
     pub url: Option<String>,
@@ -427,17 +427,6 @@ impl HttpMessage {
     }
 }
 
-impl Default for HttpRequestConfig {
-    fn default() -> Self {
-        Self {
-            timeouts: HttpTimeouts::default(),
-            retry: HttpRetryConfig::default(),
-            cache: HttpCacheConfig::default(),
-            connection: HttpConnectionConfig::default(),
-        }
-    }
-}
-
 impl Default for HttpTimeouts {
     fn default() -> Self {
         Self {
@@ -485,16 +474,6 @@ impl Default for HttpCacheConfig {
     }
 }
 
-impl Default for HttpConnectionConfig {
-    fn default() -> Self {
-        Self {
-            pool: ConnectionPoolConfig::default(),
-            tls: HttpTlsConfig::default(),
-            proxy: HttpProxyConfig::default(),
-        }
-    }
-}
-
 impl Default for ConnectionPoolConfig {
     fn default() -> Self {
         Self {
@@ -516,16 +495,6 @@ impl Default for HttpTlsConfig {
             ca_cert_file: None,
             sni_hostname: None,
             protocols: vec!["TLSv1.2".to_string(), "TLSv1.3".to_string()],
-        }
-    }
-}
-
-impl Default for HttpProxyConfig {
-    fn default() -> Self {
-        Self {
-            url: None,
-            auth: None,
-            bypass: Vec::new(),
         }
     }
 }

@@ -159,7 +159,7 @@ pub struct WebSocketConfig {
 }
 
 /// Tunnel security configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TunnelSecurityConfig {
     /// TLS configuration
     pub tls: TlsConfig,
@@ -453,16 +453,6 @@ impl Default for WebSocketConfig {
             enable_per_message_deflate: true,
             deflate_window_bits: 15,
             auto_fragment_size: Some(1024 * 1024),
-        }
-    }
-}
-
-impl Default for TunnelSecurityConfig {
-    fn default() -> Self {
-        Self {
-            tls: TlsConfig::default(),
-            access_control: AccessControlConfig::default(),
-            rate_limiting: RateLimitConfig::default(),
         }
     }
 }

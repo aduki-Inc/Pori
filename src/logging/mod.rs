@@ -72,9 +72,9 @@ where
                     Level::TRACE => "\x1b[37m", // White
                 },
             };
-            write!(writer, "{}{}\x1b[0m", level_color, level_indicator)?;
+            write!(writer, "{level_color}{level_indicator}\x1b[0m")?;
         } else {
-            write!(writer, "{}", level_indicator)?;
+            write!(writer, "{level_indicator}")?;
         }
 
         // For non-PROXY/LOCAL logs, show the target

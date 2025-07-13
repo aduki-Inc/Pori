@@ -74,7 +74,7 @@ pub fn get_status_description(status_code: u16) -> String {
         511 => "511 Network Authentication Required".to_string(),
 
         // Default for unknown codes
-        _ => format!("{} Unknown", status_code),
+        _ => format!("{status_code} Unknown"),
     }
 }
 
