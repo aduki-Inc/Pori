@@ -18,6 +18,12 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: write
+  actions: read
+  checks: write
+  pull-requests: write
+
 jobs:
   test:
     name: Test Suite
