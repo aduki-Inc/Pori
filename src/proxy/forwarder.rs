@@ -34,6 +34,7 @@ impl ProxyForwarder {
             app_state.settings.local_server.url.clone(),
             app_state.settings.local_server.timeout,
             app_state.settings.local_server.verify_ssl,
+            &app_state.settings.local_server.http_version,
         )?;
 
         Ok(Self {
@@ -120,10 +121,22 @@ impl ProxyForwarder {
             method, path, request_id, cloud_request_id
         );
 
-        // Add X-Request-ID header with the cloud request ID for tracking
+        // Add X-Request-ID header with the cloud request ID for tracking (if not already present)
         let mut headers_with_request_id = headers.clone();
-        headers_with_request_id.insert("X-Request-ID".to_string(), cloud_request_id.clone());
-        headers_with_request_id.insert("X-Forwarded-By".to_string(), "pori-proxy".to_string());
+
+        // Only add X-Request-ID if it doesn't already exist
+        if !headers_with_request_id.contains_key("x-request-id")
+            && !headers_with_request_id.contains_key("X-Request-ID")
+        {
+            headers_with_request_id.insert("X-Request-ID".to_string(), cloud_request_id.clone());
+        }
+
+        // Only add X-Forwarded-By if it doesn't already exist
+        if !headers_with_request_id.contains_key("x-forwarded-by")
+            && !headers_with_request_id.contains_key("X-Forwarded-By")
+        {
+            headers_with_request_id.insert("X-Forwarded-By".to_string(), "pori-proxy".to_string());
+        }
 
         // Notify dashboard
         let _ = self
@@ -422,11 +435,33 @@ impl ProxyForwarder {
         let mut headers = std::collections::HashMap::new();
         headers.insert(
             "content-type".to_string(),
-            "text/plain; charset=utf-8".to_string(),
+            "text/html; charset=utf-8".to_string(),
         );
         headers.insert("cache-control".to_string(), "no-cache".to_string());
 
-        let body = Some(error_message.as_bytes().to_vec());
+        // Create HTML error page
+        let html_body = format!(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>{} {}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 40px; }}
+        h1 {{ color: #d32f2f; }}
+        .error-code {{ font-size: 2em; font-weight: bold; }}
+        .error-message {{ margin: 20px 0; }}
+    </style>
+</head>
+<body>
+    <h1>Error {}</h1>
+    <div class="error-code">{} {}</div>
+    <div class="error-message">{}</div>
+</body>
+</html>"#,
+            status, status_text, status, status, status_text, error_message
+        );
+
+        let body = Some(html_body.as_bytes().to_vec());
 
         let tunnel_message = TunnelMessage::http_response_with_id(
             "default-tunnel".to_string(),
@@ -586,6 +621,7 @@ mod tests {
             max_reconnects: 0,
             verify_ssl: false,
             max_connections: 10,
+            http_version: "auto".to_string(),
         };
 
         let settings = AppSettings::from_cli(args).unwrap();

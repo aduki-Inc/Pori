@@ -5,6 +5,8 @@ use std::time::Duration;
 use tracing::{debug, info};
 use url::Url;
 
+use crate::config::settings::HttpVersion;
+
 /// HTTP client for local server communication
 #[derive(Clone)]
 pub struct LocalServerClient {
@@ -24,17 +26,38 @@ pub struct LocalServerResponse {
 
 impl LocalServerClient {
     /// Create a new local server client
-    pub fn new(base_url: Url, timeout: Duration, verify_ssl: bool) -> Result<Self> {
-        let client = ClientBuilder::new()
+    pub fn new(
+        base_url: Url,
+        timeout: Duration,
+        verify_ssl: bool,
+        http_version: &HttpVersion,
+    ) -> Result<Self> {
+        let mut builder = ClientBuilder::new()
             .timeout(timeout)
             .connect_timeout(Duration::from_secs(10))
             .danger_accept_invalid_certs(!verify_ssl)
             .pool_max_idle_per_host(10)
             .pool_idle_timeout(Duration::from_secs(60))
-            .tcp_keepalive(Duration::from_secs(30))
-            .http2_prior_knowledge()
-            .build()
-            .context("Failed to create an HTTP client")?;
+            .tcp_keepalive(Duration::from_secs(30));
+
+        // Configure HTTP version based on settings
+        builder = match http_version {
+            HttpVersion::Http1Only => {
+                info!("Local server HTTP client: forcing HTTP/1.1");
+                builder.http1_only()
+            }
+            HttpVersion::Http2Only => {
+                info!("Local server HTTP client: forcing HTTP/2");
+                builder.http2_prior_knowledge()
+            }
+            HttpVersion::Auto => {
+                info!("Local server HTTP client: auto-negotiating HTTP version (HTTP/2 with HTTP/1.1 fallback)");
+                // Default behavior - try HTTP/2, fallback to HTTP/1.1
+                builder
+            }
+        };
+
+        let client = builder.build().context("Failed to create an HTTP client")?;
 
         Ok(Self {
             client,
@@ -162,7 +185,12 @@ impl LocalServerClient {
         let header_lower = header_name.to_lowercase();
         matches!(
             header_lower.as_str(),
+            // Connection-related headers
             "connection" | "upgrade" | "proxy-connection" | "transfer-encoding" | "te" | "trailers"
+            // Headers that might conflict with proxy operation
+            | "x-request-id" | "x-forwarded-by" | "x-forwarded-for" | "x-forwarded-proto"
+            // Server-specific headers that shouldn't be forwarded
+            | "server" | "x-powered-by"
         )
     }
 
@@ -189,7 +217,9 @@ mod tests {
     #[test]
     fn test_url_building() {
         let base_url: Url = "https://localhost:3000".parse().unwrap();
-        let client = LocalServerClient::new(base_url, Duration::from_secs(30), false).unwrap();
+        let client =
+            LocalServerClient::new(base_url, Duration::from_secs(30), false, &HttpVersion::Auto)
+                .unwrap();
 
         let url1 = client.build_url("/api/test").unwrap();
         assert_eq!(url1.to_string(), "https://localhost:3000/api/test");
@@ -201,7 +231,9 @@ mod tests {
     #[test]
     fn test_header_filtering() {
         let base_url: Url = "https://localhost:3000".parse().unwrap();
-        let client = LocalServerClient::new(base_url, Duration::from_secs(30), false).unwrap();
+        let client =
+            LocalServerClient::new(base_url, Duration::from_secs(30), false, &HttpVersion::Auto)
+                .unwrap();
 
         assert!(client.should_skip_header("host"));
         assert!(client.should_skip_header("Connection"));

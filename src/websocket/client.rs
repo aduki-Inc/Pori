@@ -8,8 +8,9 @@ use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, Web
 use tracing::{debug, error, info, instrument, warn};
 
 use super::{reconnect::ReconnectManager, tunnel::TunnelHandler};
-use crate::{proxy_log, AppState, ConnectionStatus, DashboardEvent};
+use crate::protocol::messages::{HttpPayload, MessagePayload};
 use crate::protocol::tunnel::TunnelMessage;
+use crate::{proxy_log, AppState, ConnectionStatus, DashboardEvent};
 
 type WsStream = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
@@ -241,13 +242,23 @@ impl WebSocketClient {
                 // Try to parse as a tunnel message first
                 match TunnelMessage::from_json(&text) {
                     Ok(tunnel_message) => {
+                        // Extract and log HTTP request details if available
+                        if let MessagePayload::Http(HttpPayload::Request { method, url, .. }) =
+                            &tunnel_message.message.payload
+                        {
+                            crate::proxy_log!("INCOMING REQUEST: {} {}", method, url);
+                        }
+
                         if let Some(response) =
                             self.tunnel_handler.handle_message(tunnel_message).await?
                         {
                             self.send_message(response).await?;
                         }
                     }
-                    Err(_) => {
+                    Err(parse_error) => {
+                        // Log the parsing error to understand why it failed
+                        crate::proxy_log!("Failed to parse as TunnelMessage: {}", parse_error);
+
                         // Not a tunnel message, check if it's a server status/auth message
                         if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
                             if let Some(msg_type) = value.get("type").and_then(|v| v.as_str()) {
@@ -294,8 +305,17 @@ impl WebSocketClient {
             Message::Binary(data) => {
                 debug!("Received a binary message ({} bytes)", data.len());
 
+                crate::proxy_log!("WS RECEIVED: Binary message ({} bytes)", data.len());
+
                 let tunnel_message = TunnelMessage::from_binary(&data)
                     .context("Failed to parse a binary tunnel message")?;
+
+                // Extract and log HTTP request details if available
+                if let MessagePayload::Http(HttpPayload::Request { method, url, .. }) =
+                    &tunnel_message.message.payload
+                {
+                    crate::proxy_log!("INCOMING REQUEST: {} {}", method, url);
+                }
 
                 if let Some(response) = self.tunnel_handler.handle_message(tunnel_message).await? {
                     self.send_message(response).await?;
@@ -330,13 +350,9 @@ impl WebSocketClient {
         ws_sink: &mut futures_util::stream::SplitSink<WsStream, Message>,
         message: TunnelMessage,
     ) -> Result<()> {
-        let ws_message = if message.has_binary_data() {
-            let binary_data = message.to_binary()?;
-            Message::Binary(binary_data.into())
-        } else {
-            let json_data = message.to_json()?;
-            Message::Text(json_data.into())
-        };
+        // Always send as JSON since the server expects JSON format, not MessagePack binary
+        let json_data = message.to_json()?;
+        let ws_message = Message::Text(json_data.into());
 
         ws_sink
             .send(ws_message)
@@ -436,6 +452,7 @@ mod tests {
             max_reconnects: 0,
             verify_ssl: false,
             max_connections: 10,
+            http_version: "auto".to_string(),
         };
 
         let settings = AppSettings::from_cli(args).unwrap();

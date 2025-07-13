@@ -20,16 +20,28 @@ pub struct TunnelEnvelope {
     pub tunnel_id: String,
     /// Client identifier
     pub client_id: String,
-    /// Server identifier
+    /// Server identifier (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub server_id: Option<String>,
-    /// Tunnel protocol version
-    pub protocol_version: String,
-    /// Compression applied
+    /// Tunnel protocol version (optional, defaults to "1.0")
+    #[serde(
+        default = "default_protocol_version",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub protocol_version: Option<String>,
+    /// Compression applied (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub compression: Option<String>,
-    /// Encryption applied
+    /// Encryption applied (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub encryption: Option<String>,
-    /// Routing information
-    pub routing: TunnelRouting,
+    /// Routing information (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routing: Option<TunnelRouting>,
+}
+
+fn default_protocol_version() -> Option<String> {
+    Some("1.0".to_string())
 }
 
 /// Tunnel routing information
@@ -212,27 +224,12 @@ impl TunnelMessage {
         Self {
             envelope: TunnelEnvelope {
                 tunnel_id,
-                client_id: client_id.clone(),
+                client_id,
                 server_id: None,
-                protocol_version: "1.0.0".to_string(),
+                protocol_version: Some("1.0.0".to_string()),
                 compression: None,
                 encryption: None,
-                routing: TunnelRouting {
-                    source: TunnelEndpoint {
-                        endpoint_type: "client".to_string(),
-                        id: client_id,
-                        address: None,
-                        capabilities: Vec::new(),
-                    },
-                    destination: TunnelEndpoint {
-                        endpoint_type: "server".to_string(),
-                        id: "local".to_string(),
-                        address: None,
-                        capabilities: Vec::new(),
-                    },
-                    path: Vec::new(),
-                    load_balancing: None,
-                },
+                routing: None,
             },
             message,
         }

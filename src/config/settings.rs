@@ -36,6 +36,15 @@ pub struct LocalServerSettings {
     pub max_connections: usize,
     pub keep_alive: Duration,
     pub connect_timeout: Duration,
+    pub http_version: HttpVersion,
+}
+
+/// HTTP version preference
+#[derive(Debug, Clone)]
+pub enum HttpVersion {
+    Auto,      // Try HTTP/2, fallback to HTTP/1.1
+    Http1Only, // Force HTTP/1.1
+    Http2Only, // Force HTTP/2
 }
 
 /// Dashboard server settings
@@ -90,6 +99,7 @@ pub struct LocalServerConfig {
     pub max_connections: Option<usize>,
     pub keep_alive: Option<u64>,
     pub connect_timeout: Option<u64>,
+    pub http_version: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -219,6 +229,18 @@ impl AppSettings {
                         .and_then(|ls| ls.connect_timeout)
                         .unwrap_or(10),
                 ),
+                http_version: {
+                    let version_str = config_file
+                        .local_server
+                        .as_ref()
+                        .and_then(|ls| ls.http_version.as_ref())
+                        .unwrap_or(&cli.http_version);
+                    match version_str.to_lowercase().as_str() {
+                        "http2" => HttpVersion::Http2Only,
+                        "auto" => HttpVersion::Auto,
+                        _ => HttpVersion::Http1Only, // Default to HTTP/1.1 for "http1" and any unknown values
+                    }
+                },
             },
             dashboard: DashboardSettings {
                 port: config_file

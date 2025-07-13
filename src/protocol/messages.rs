@@ -40,12 +40,16 @@ pub struct MessageMetadata {
     /// Session identifier
     pub session_id: Option<String>,
     /// Custom headers
+    #[serde(default)]
     pub headers: HashMap<String, String>,
     /// Message tags for routing and filtering
+    #[serde(default)]
     pub tags: Vec<String>,
     /// Retry count
+    #[serde(default)]
     pub retry_count: u32,
     /// Max retry attempts
+    #[serde(default)]
     pub max_retries: u32,
     /// TTL in seconds
     pub ttl: Option<u64>,
@@ -53,11 +57,12 @@ pub struct MessageMetadata {
 
 /// Message payload containing the actual data
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
+#[serde(tag = "kind", content = "data")]
 pub enum MessagePayload {
     /// Authentication and authorization messages
     Auth(AuthPayload),
     /// HTTP request/response messages
+    #[serde(rename = "HTTP")]
     Http(HttpPayload),
     /// Control and management messages
     Control(ControlPayload),
@@ -104,7 +109,7 @@ pub enum AuthPayload {
 
 /// HTTP communication payload
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "http_type")]
+#[serde(tag = "kind")]
 pub enum HttpPayload {
     /// HTTP request
     Request {
@@ -112,6 +117,7 @@ pub enum HttpPayload {
         url: String,
         headers: HashMap<String, String>,
         body: Option<Vec<u8>>,
+        #[serde(default)]
         query_params: HashMap<String, String>,
         #[serde(rename = "requestId")]
         request_id: String,
@@ -136,8 +142,20 @@ pub enum HttpPayload {
 
 /// Control message payload
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "control_type")]
+#[serde(tag = "kind")]
 pub enum ControlPayload {
+    /// Authentication status
+    Authentication {
+        status: String,
+        message: String,
+        timestamp: String,
+    },
+    /// Error message
+    Error {
+        error: String,
+        code: String,
+        timestamp: String,
+    },
     /// Ping for connection health
     Ping {
         timestamp: u64,

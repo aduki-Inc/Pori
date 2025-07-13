@@ -57,6 +57,10 @@ pub struct CliArgs {
     /// Maximum connections to a local server
     #[arg(long, default_value_t = 10)]
     pub max_connections: usize,
+
+    /// HTTP version for local server communication (auto, http1, http2)
+    #[arg(long, default_value = "http1", env = "PORI_HTTP_VERSION")]
+    pub http_version: String,
 }
 
 impl CliArgs {
@@ -119,6 +123,17 @@ impl CliArgs {
         // Validate max connections
         if self.max_connections == 0 {
             anyhow::bail!("Max connections must be greater than 0");
+        }
+
+        // Validate HTTP version
+        if !matches!(
+            self.http_version.to_lowercase().as_str(),
+            "auto" | "http1" | "http2"
+        ) {
+            anyhow::bail!(
+                "Invalid HTTP version: {}. Must be one of: auto, http1, http2",
+                self.http_version
+            );
         }
 
         // Validate log level

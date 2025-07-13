@@ -86,26 +86,37 @@ pub enum CompressionAlgorithm {
 /// Message encoding format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessageEncoding {
+    #[serde(rename = "json")]
     Json,
+    #[serde(rename = "messagepack")]
     MessagePack,
+    #[serde(rename = "protobuf")]
     Protobuf,
+    #[serde(rename = "cbor")]
     Cbor,
 }
 
 /// Message priority levels
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MessagePriority {
+    #[serde(rename = "low")]
     Low = 0,
+    #[serde(rename = "normal")]
     Normal = 1,
+    #[serde(rename = "high")]
     High = 2,
+    #[serde(rename = "critical")]
     Critical = 3,
 }
 
 /// Message delivery mode
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DeliveryMode {
+    #[serde(rename = "at_most_once")]
     AtMostOnce,
+    #[serde(rename = "at_least_once")]
     AtLeastOnce,
+    #[serde(rename = "exactly_once")]
     ExactlyOnce,
 }
 

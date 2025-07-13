@@ -118,8 +118,13 @@ impl ApiHandler {
     /// Handle endpoints endpoint - lists available WebSocket endpoints
     async fn handle_endpoints(&self) -> Result<Response<Full<Bytes>>> {
         let settings = &self.app_state.settings;
-        let base_url = format!("{}://{}:{}", 
-            if settings.websocket.url.scheme() == "wss" { "wss" } else { "ws" },
+        let base_url = format!(
+            "{}://{}:{}",
+            if settings.websocket.url.scheme() == "wss" {
+                "wss"
+            } else {
+                "ws"
+            },
             settings.dashboard.bind_address,
             settings.dashboard.port
         );
@@ -148,13 +153,13 @@ impl ApiHandler {
                     "description": "Get current connection status and basic info"
                 },
                 {
-                    "path": "/api/stats", 
+                    "path": "/api/stats",
                     "method": "GET",
                     "description": "Get detailed statistics and metrics"
                 },
                 {
                     "path": "/api/config",
-                    "method": "GET", 
+                    "method": "GET",
                     "description": "Get current configuration"
                 },
                 {
@@ -169,7 +174,7 @@ impl ApiHandler {
                 },
                 {
                     "path": "/api/shutdown",
-                    "method": "POST", 
+                    "method": "POST",
                     "description": "Initiate a graceful shutdown"
                 }
             ]
@@ -241,6 +246,7 @@ mod tests {
             max_reconnects: 0,
             verify_ssl: false,
             max_connections: 10,
+            http_version: "http1".to_string(),
         };
 
         let settings = AppSettings::from_cli(args).unwrap();

@@ -28,7 +28,7 @@ impl DashboardService {
         // Try to load static files, fall back to defaults if needed
         let static_handler = Arc::new(StaticFileHandler::new());
 
-        // If no static files were loaded, we could fall back to defaults, 
+        // If no static files were loaded, we could fall back to defaults,
         // but for now we'll just use the empty handler
 
         let api_handler = Arc::new(ApiHandler::new(app_state.clone()));
@@ -263,7 +263,9 @@ impl DashboardService {
         let response = Response::builder()
             .status(StatusCode::UNAUTHORIZED)
             .header("content-type", "text/plain")
-            .body(Full::new(Bytes::from("Unauthorized: Invalid or missing token")))?;
+            .body(Full::new(Bytes::from(
+                "Unauthorized: Invalid or missing token",
+            )))?;
         Ok(response)
     }
 
@@ -284,7 +286,9 @@ impl DashboardService {
                     .status(StatusCode::SWITCHING_PROTOCOLS)
                     .header("upgrade", "websocket")
                     .header("connection", "upgrade")
-                    .body(Full::new(Bytes::from("WebSocket upgrade - Metrics endpoint")))?;
+                    .body(Full::new(Bytes::from(
+                        "WebSocket upgrade - Metrics endpoint",
+                    )))?;
                 return Ok(response);
             }
         }
@@ -293,7 +297,9 @@ impl DashboardService {
         let response = Response::builder()
             .status(StatusCode::UNAUTHORIZED)
             .header("content-type", "text/plain")
-            .body(Full::new(Bytes::from("Unauthorized: Invalid or missing token")))?;
+            .body(Full::new(Bytes::from(
+                "Unauthorized: Invalid or missing token",
+            )))?;
         Ok(response)
     }
 
@@ -344,6 +350,7 @@ mod tests {
             max_reconnects: 0,
             verify_ssl: false,
             max_connections: 10,
+            http_version: "http1".to_string(),
         };
 
         let settings = AppSettings::from_cli(args).unwrap();

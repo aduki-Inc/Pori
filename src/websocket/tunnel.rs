@@ -1,6 +1,6 @@
 use crate::protocol::http::HttpMessage;
 use crate::protocol::messages::{
-    AuthPayload, ControlPayload, ErrorCategory, HttpPayload, MessagePayload, StatsPayload,
+    AuthPayload, ControlPayload, HttpPayload, MessagePayload, StatsPayload,
 };
 use crate::protocol::tunnel::TunnelMessage;
 use crate::{utils::http::get_status_description, AppState, ConnectionStatus, DashboardEvent};
@@ -90,21 +90,15 @@ impl TunnelHandler {
                     } => {
                         // Parse URL to extract path and query parameters
                         let (path, _query_params) = self.parse_url_components(url);
-                        let body_size = body.as_ref().map(|b| b.len()).unwrap_or(0);
                         let message_id = &message.message.metadata.id;
+
+                        crate::proxy_log!("INCOMING: {} {}", method, path);
 
                         // The request ID is now required, so we can use it directly
                         let cloud_request_id = request_id.clone();
 
-                        // Log with both IDs for clarity
-                        crate::proxy_log!(
-                            "REQUEST [{}] {} {} (Body: {} bytes) [Cloud RequestID: {}]",
-                            message_id,
-                            method,
-                            path,
-                            body_size,
-                            cloud_request_id
-                        );
+                        // Log incoming request
+                        info!("→ {} {} [{}]", method, path, cloud_request_id);
 
                         debug!("Request headers: {:?}", headers);
 
@@ -308,6 +302,8 @@ impl TunnelHandler {
             })
             .await;
 
+        crate::proxy_log!("OUTGOING: {} {}", status, status_text);
+
         TunnelMessage::http_response_with_id(
             self.tunnel_id.clone(),
             self.client_id.clone(),
@@ -343,25 +339,6 @@ impl TunnelHandler {
             .await;
 
         self.create_error_response_with_request_id(request_id, error, status_code, cloud_request_id)
-    }
-
-    /// Create error response
-    fn create_error_response(
-        &self,
-        request_id: String,
-        error: String,
-        status_code: Option<u16>,
-    ) -> TunnelMessage {
-        TunnelMessage::error(
-            self.tunnel_id.clone(),
-            self.client_id.clone(),
-            status_code
-                .map(|c| c.to_string())
-                .unwrap_or_else(|| "UNKNOWN".to_string()),
-            error,
-            ErrorCategory::Internal,
-            Some(request_id),
-        )
     }
 
     /// Create error response with request ID
@@ -556,6 +533,7 @@ mod tests {
             max_reconnects: 0,
             verify_ssl: false,
             max_connections: 10,
+            http_version: "http1".to_string(),
         };
         let settings = AppSettings::from_cli(args).unwrap();
         let (app_state, _) = AppState::new(settings);
