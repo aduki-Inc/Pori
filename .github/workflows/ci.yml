@@ -63,6 +63,63 @@ jobs:
             ./target/release/pori --version
           fi
 
+  auto-release:
+    name: Auto Release
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "version=v$VERSION" >> $GITHUB_OUTPUT
+          echo "raw_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: v$VERSION"
+
+      - name: Check if tag exists
+        id: tag_check
+        run: |
+          if git rev-parse --verify "refs/tags/${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag ${{ steps.version.outputs.version }} already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag ${{ steps.version.outputs.version }} does not exist"
+          fi
+
+      - name: Create and push tag
+        id: create_tag
+        if: steps.tag_check.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.version }}" -m "Release ${{ steps.version.outputs.version }}"
+          git push origin "${{ steps.version.outputs.version }}"
+          echo "Created and pushed tag: ${{ steps.version.outputs.version }}"
+          echo "tag_created=true" >> $GITHUB_OUTPUT
+
+      - name: Trigger release workflow
+        if: always()
+        run: |
+          # Wait a moment for tag to be available if created
+          if [ "${{ steps.create_tag.outputs.tag_created }}" = "true" ]; then
+            echo "Waiting for tag to be available..."
+            sleep 15
+          fi
+
+          # Use GitHub CLI to trigger the release workflow
+          echo "Triggering release workflow for version ${{ steps.version.outputs.version }}"
+          gh workflow run release.yml --ref main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest

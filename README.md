@@ -353,6 +353,45 @@ docs/                # Project documentation
 release/             # Release artifacts and scripts
 ```
 
+### Release Process
+
+The project uses automated CI/CD for releases:
+
+#### Automatic Releases (Recommended)
+
+1. Update the version in `Cargo.toml`
+2. Update `CHANGELOG.md` with the new version and changes
+3. Commit and push to the `main` branch
+4. GitHub Actions will automatically:
+   - Run tests and quality checks
+   - Create a git tag (if it doesn't exist)
+   - Build binaries for all platforms
+   - Create a GitHub release with assets
+
+#### Manual Release
+
+You can also use the local build script:
+
+```bash
+# Build and prepare for release
+./release/build.sh
+
+# With options
+./release/build.sh --skip-tests --dry-run
+
+# Push the tag to trigger release
+git push origin v0.1.4
+```
+
+#### Force Update Existing Release
+
+If you need to update an existing release:
+
+```bash
+# Trigger workflow manually with force option
+gh workflow run ci-release.yml --ref main -f force_release=true
+```
+
 ## Contributing
 
 1. Fork the repository

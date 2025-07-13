@@ -2,7 +2,9 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use super::messages::{ProtocolMessage, MessagePayload, ControlPayload, ErrorCategory, ConnectionStatus};
+use super::messages::{
+    ConnectionStatus, ControlPayload, ErrorCategory, MessagePayload, ProtocolMessage,
+};
 
 /// WebSocket-specific message wrapper for WebSocket communication
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -528,8 +530,7 @@ mod tests {
             compressed_size: 600,
         };
 
-        let message = WebSocketMessage::ping("ws-conn-1".to_string())
-            .with_compression(compression);
+        let message = WebSocketMessage::ping("ws-conn-1".to_string()).with_compression(compression);
 
         assert!(message.envelope.compression.is_some());
     }

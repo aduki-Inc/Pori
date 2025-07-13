@@ -1,9 +1,12 @@
-name: Release
+name: CI and Release
 
 on:
   push:
+    branches: [main, develop]
     tags:
       - "v*"
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       force_release:
@@ -16,40 +19,136 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  extract-version:
-    name: Extract Version
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      raw_version: ${{ steps.version.outputs.raw_version }}
-      changelog_content: ${{ steps.changelog.outputs.content }}
+  test:
+    name: Test Suite
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable, beta]
+        exclude:
+          - os: macos-latest
+            rust: beta
+          - os: windows-latest
+            rust: beta
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Extract version from Cargo.toml
-        id: version
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: clippy, rustfmt
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Build release
+        run: cargo build --release --verbose
+
+      - name: Test binary
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            ./target/release/pori.exe --version
+          else
+            ./target/release/pori --version
+          fi
+
+  check-version-and-release:
+    name: Version Check and Release
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    outputs:
+      should_release: ${{ steps.version_check.outputs.should_release }}
+      version: ${{ steps.version_check.outputs.version }}
+      raw_version: ${{ steps.version_check.outputs.raw_version }}
+      changelog_content: ${{ steps.changelog.outputs.content }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version and check release conditions
+        id: version_check
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # For manual dispatch, extract from Cargo.toml
+            # Manual trigger
             VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-            echo "version=v$VERSION" >> $GITHUB_OUTPUT
-            echo "raw_version=$VERSION" >> $GITHUB_OUTPUT
-          else
-            # For tag push, use the tag
+            FORCE_RELEASE="${{ github.event.inputs.force_release }}"
+            echo "Manual trigger with force_release: $FORCE_RELEASE"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Tag push
             TAG_VERSION=${GITHUB_REF#refs/tags/}
-            RAW_VERSION=${TAG_VERSION#v}
-            echo "version=$TAG_VERSION" >> $GITHUB_OUTPUT
-            echo "raw_version=$RAW_VERSION" >> $GITHUB_OUTPUT
+            VERSION=${TAG_VERSION#v}
+            FORCE_RELEASE="true"
+            echo "Tag push detected: $TAG_VERSION"
+          else
+            # Push to main
+            VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+            FORCE_RELEASE="false"
+            echo "Push to main detected"
+          fi
+
+          echo "version=v$VERSION" >> $GITHUB_OUTPUT
+          echo "raw_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: v$VERSION"
+
+          # Check if tag exists
+          if git rev-parse --verify "refs/tags/v$VERSION" >/dev/null 2>&1; then
+            TAG_EXISTS="true"
+            echo "Tag v$VERSION already exists"
+          else
+            TAG_EXISTS="false"
+            echo "Tag v$VERSION does not exist"
+          fi
+
+          # Determine if we should release
+          if [ "$TAG_EXISTS" = "false" ] || [ "$FORCE_RELEASE" = "true" ]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "Will proceed with release"
+            
+            # Create tag if it doesn't exist
+            if [ "$TAG_EXISTS" = "false" ]; then
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git tag -a "v$VERSION" -m "Release v$VERSION"
+              git push origin "v$VERSION"
+              echo "Created and pushed tag: v$VERSION"
+            fi
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "Skipping release - tag exists and not forced"
           fi
 
       - name: Extract changelog for current version
         id: changelog
+        if: steps.version_check.outputs.should_release == 'true'
         run: |
           # Extract changelog section for current version
-          CHANGELOG_CONTENT=$(awk '/^## \['"${{ steps.version.outputs.raw_version }}"'\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md)
+          CHANGELOG_CONTENT=$(awk '/^## \['"${{ steps.version_check.outputs.raw_version }}"'\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md)
           if [ -z "$CHANGELOG_CONTENT" ]; then
-            echo "No changelog found for version ${{ steps.version.outputs.raw_version }}"
+            echo "No changelog found for version ${{ steps.version_check.outputs.raw_version }}"
             CHANGELOG_CONTENT="See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
           fi
           # Escape content for GitHub Actions
@@ -57,9 +156,11 @@ jobs:
           CHANGELOG_CONTENT="${CHANGELOG_CONTENT//$'\n'/'%0A'}"
           CHANGELOG_CONTENT="${CHANGELOG_CONTENT//$'\r'/'%0D'}"
           echo "content=$CHANGELOG_CONTENT" >> $GITHUB_OUTPUT
+
   build:
     name: Build ${{ matrix.target }}
-    needs: extract-version
+    needs: check-version-and-release
+    if: needs.check-version-and-release.outputs.should_release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -94,7 +195,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install cross-compilation tools
-        if: matrix.target == 'x86_64-unknown-linux-musl' || matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-musl'
+        if: matrix.target == 'x86_64-unknown-linux-musl' || matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           cargo install cross --git https://github.com/cross-rs/cross
 
@@ -144,7 +245,8 @@ jobs:
 
   release:
     name: Create Release
-    needs: [extract-version, build]
+    needs: [check-version-and-release, build]
+    if: needs.check-version-and-release.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -170,23 +272,23 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ needs.extract-version.outputs.version }}
-          name: Release ${{ needs.extract-version.outputs.version }}
+          tag_name: ${{ needs.check-version-and-release.outputs.version }}
+          name: Release ${{ needs.check-version-and-release.outputs.version }}
           body: |
             ## Changes
 
-            ${{ needs.extract-version.outputs.changelog_content }}
+            ${{ needs.check-version-and-release.outputs.changelog_content }}
 
             ## Downloads
 
             | Platform | Architecture | Download |
             |----------|--------------|----------|
-            | Linux | x86_64 | [pori-linux-x86_64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ needs.extract-version.outputs.version }}/pori-linux-x86_64.tar.gz) |
-            | Linux | x86_64 (musl) | [pori-linux-x86_64-musl.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ needs.extract-version.outputs.version }}/pori-linux-x86_64-musl.tar.gz) |
-            | Linux | ARM64 | [pori-linux-aarch64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ needs.extract-version.outputs.version }}/pori-linux-aarch64.tar.gz) |
-            | macOS | x86_64 | [pori-darwin-x86_64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ needs.extract-version.outputs.version }}/pori-darwin-x86_64.tar.gz) |
-            | macOS | ARM64 | [pori-darwin-aarch64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ needs.extract-version.outputs.version }}/pori-darwin-aarch64.tar.gz) |
-            | Windows | x86_64 | [pori-windows-x86_64.zip](https://github.com/${{ github.repository }}/releases/download/${{ needs.extract-version.outputs.version }}/pori-windows-x86_64.zip) |
+            | Linux | x86_64 | [pori-linux-x86_64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version-and-release.outputs.version }}/pori-linux-x86_64.tar.gz) |
+            | Linux | x86_64 (musl) | [pori-linux-x86_64-musl.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version-and-release.outputs.version }}/pori-linux-x86_64-musl.tar.gz) |
+            | Linux | ARM64 | [pori-linux-aarch64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version-and-release.outputs.version }}/pori-linux-aarch64.tar.gz) |
+            | macOS | x86_64 | [pori-darwin-x86_64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version-and-release.outputs.version }}/pori-darwin-x86_64.tar.gz) |
+            | macOS | ARM64 | [pori-darwin-aarch64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version-and-release.outputs.version }}/pori-darwin-aarch64.tar.gz) |
+            | Windows | x86_64 | [pori-windows-x86_64.zip](https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version-and-release.outputs.version }}/pori-windows-x86_64.zip) |
 
             ## Installation
 
@@ -213,13 +315,13 @@ jobs:
           prerelease: false
           generate_release_notes: false
           fail_on_unmatched_files: false
-          target_commitish: ${{ github.sha }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   test-install:
     name: Test Installation Script
-    needs: [extract-version, release]
+    needs: [check-version-and-release, release]
+    if: needs.check-version-and-release.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

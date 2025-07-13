@@ -26,7 +26,10 @@ async fn main() -> Result<()> {
         cli_args.protocol, cli_args.port
     );
     if !cli_args.no_dashboard {
-        info!("Dashboard server: http://localhost:{}", cli_args.dashboard_port);
+        info!(
+            "Dashboard server: http://localhost:{}",
+            cli_args.dashboard_port
+        );
     }
     info!("Log level: {}", cli_args.log_level);
 

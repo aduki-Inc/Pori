@@ -1,0 +1,106 @@
+name: Auto Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: "Force release even if tag exists"
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    # Run daily at 2 AM UTC to check for new versions
+    - cron: "0 2 * * *"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-and-release:
+    name: Check Version and Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "version=v$VERSION" >> $GITHUB_OUTPUT
+          echo "raw_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: v$VERSION"
+
+      - name: Check if tag exists
+        id: tag_check
+        run: |
+          if git rev-parse --verify "refs/tags/${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag ${{ steps.version.outputs.version }} already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag ${{ steps.version.outputs.version }} does not exist"
+          fi
+
+      - name: Check if should proceed
+        id: should_proceed
+        run: |
+          if [ "${{ steps.tag_check.outputs.exists }}" = "false" ] || [ "${{ github.event.inputs.force_release }}" = "true" ]; then
+            echo "proceed=true" >> $GITHUB_OUTPUT
+            echo "Will proceed with release"
+          else
+            echo "proceed=false" >> $GITHUB_OUTPUT
+            echo "Skipping release - tag exists and force_release is false"
+          fi
+
+      - name: Setup Rust
+        if: steps.should_proceed.outputs.proceed == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Check formatting
+        if: steps.should_proceed.outputs.proceed == 'true'
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        if: steps.should_proceed.outputs.proceed == 'true'
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        if: steps.should_proceed.outputs.proceed == 'true'
+        run: cargo test --verbose
+
+      - name: Build release
+        if: steps.should_proceed.outputs.proceed == 'true'
+        run: cargo build --release --verbose
+
+      - name: Test binary
+        if: steps.should_proceed.outputs.proceed == 'true'
+        run: ./target/release/pori --version
+
+      - name: Create and push tag
+        if: steps.should_proceed.outputs.proceed == 'true' && steps.tag_check.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Extract changelog for current version
+          CHANGELOG_CONTENT=$(awk '/^## \['"${{ steps.version.outputs.raw_version }}"'\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md)
+          if [ -z "$CHANGELOG_CONTENT" ]; then
+            CHANGELOG_CONTENT="Release ${{ steps.version.outputs.version }}"
+          fi
+
+          git tag -a "${{ steps.version.outputs.version }}" -m "$CHANGELOG_CONTENT"
+          git push origin "${{ steps.version.outputs.version }}"
+          echo "Created and pushed tag: ${{ steps.version.outputs.version }}"
+
+      - name: Trigger release workflow
+        if: steps.should_proceed.outputs.proceed == 'true'
+        run: |
+          echo "Tag ${{ steps.version.outputs.version }} has been created"
+          echo "The release workflow will be triggered automatically by the new tag"
+          echo "You can monitor the release build at: https://github.com/${{ github.repository }}/actions"

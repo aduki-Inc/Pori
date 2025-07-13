@@ -155,7 +155,8 @@ pub fn get_status_text(status_code: u16) -> String {
 
         // Default for unknown codes
         _ => "Unknown",
-    }.to_string()
+    }
+    .to_string()
 }
 
 #[cfg(test)]

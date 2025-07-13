@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2025-07-13
+
+### Fixed
+
+- **Code Formatting & CI/CD Compliance**
+  - Fixed Rust code formatting to comply with rustfmt standards across all modules
+  - Resolved import ordering issues in `src/websocket/mod.rs` and `src/protocol/websocket.rs`
+  - Fixed multi-line formatting for macro calls in `src/main.rs` and `src/lib.rs`
+  - Corrected string literal formatting in dashboard initialization logging
+  - Fixed method chaining formatting in WebSocket message compression handling
+  - Resolved all CI/CD formatting check failures that were blocking releases
+
+- **Build System**
+  - Ensured clean compilation with no formatting warnings
+  - Updated build target files to reflect version 0.1.4
+  - Validated release build process works correctly
+
+### Changed
+
+- **Code Quality Improvements**
+  - Enhanced code readability with consistent formatting across the entire codebase
+  - Improved import organization following Rust style guidelines
+  - Standardized macro usage formatting for better maintainability
+  - Updated CI/CD pipeline compliance to prevent future formatting issues
+
+### Technical Details
+
+- All source files now pass `cargo fmt --all -- --check` validation
+- Import statements reorganized to follow `use crate::` before external crates pattern
+- Multi-line function calls properly formatted with appropriate indentation
+- Method chaining now follows consistent line-breaking rules
+
 ## [0.1.3] - 2025-07-01
 
 ### Added

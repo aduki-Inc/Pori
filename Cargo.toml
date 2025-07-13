@@ -1,6 +1,6 @@
 [package]
 name = "pori"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 authors = ["femar <femar@example.com>"]
 description = "Pori - wild, open proxy client with dashboard"

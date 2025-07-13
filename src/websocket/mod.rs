@@ -7,8 +7,8 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::error;
 
-use crate::{proxy_log, AppState};
 use crate::protocol::tunnel::TunnelMessage;
+use crate::{proxy_log, AppState};
 
 /// Run the WebSocket client component
 pub async fn run_websocket_client(

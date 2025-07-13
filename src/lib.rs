@@ -111,7 +111,10 @@ pub async fn run_application(settings: AppSettings) -> Result<()> {
 
     // Start application components concurrently
     let dashboard_task = if !app_state.settings.no_dashboard {
-        local_log!("Starting a dashboard server on port {}", app_state.settings.dashboard.port);
+        local_log!(
+            "Starting a dashboard server on port {}",
+            app_state.settings.dashboard.port
+        );
         Some(tokio::spawn({
             let state = app_state.clone();
             async move {
@@ -125,8 +128,10 @@ pub async fn run_application(settings: AppSettings) -> Result<()> {
         None
     };
 
-    info!("Starting proxy forwarder for local server: {}", 
-          app_state.settings.local_server.url);
+    info!(
+        "Starting proxy forwarder for local server: {}",
+        app_state.settings.local_server.url
+    );
     let proxy_task = tokio::spawn({
         let state = app_state.clone();
         async move {
@@ -136,7 +141,10 @@ pub async fn run_application(settings: AppSettings) -> Result<()> {
         }
     });
 
-    proxy_log!("Starting WebSocket client connecting to {}", app_state.settings.websocket.url);
+    proxy_log!(
+        "Starting WebSocket client connecting to {}",
+        app_state.settings.websocket.url
+    );
     let websocket_task = tokio::spawn({
         let state = app_state.clone();
         async move {
