@@ -2,9 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use super::messages::{
-    ErrorCategory, HttpPayload, MessagePayload, ProtocolMessage,
-};
+use super::messages::{ErrorCategory, HttpPayload, MessagePayload, ProtocolMessage};
 
 /// Tunnel-specific message wrapper for WebSocket communication
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -253,6 +251,20 @@ impl TunnelMessage {
         Self::new(tunnel_id, client_id, message)
     }
 
+    /// Create HTTP request tunnel message with request ID
+    pub fn http_request_with_id(
+        tunnel_id: String,
+        client_id: String,
+        method: String,
+        url: String,
+        headers: HashMap<String, String>,
+        body: Option<Vec<u8>>,
+        request_id: String,
+    ) -> Self {
+        let message = ProtocolMessage::http_request_with_id(method, url, headers, body, request_id);
+        Self::new(tunnel_id, client_id, message)
+    }
+
     /// Create HTTP response tunnel message
     pub fn http_response(
         tunnel_id: String,
@@ -263,6 +275,21 @@ impl TunnelMessage {
         body: Option<Vec<u8>>,
     ) -> Self {
         let message = ProtocolMessage::http_response(status, status_text, headers, body);
+        Self::new(tunnel_id, client_id, message)
+    }
+
+    /// Create HTTP response tunnel message with request ID
+    pub fn http_response_with_id(
+        tunnel_id: String,
+        client_id: String,
+        status: u16,
+        status_text: String,
+        headers: HashMap<String, String>,
+        body: Option<Vec<u8>>,
+        request_id: String,
+    ) -> Self {
+        let message =
+            ProtocolMessage::http_response_with_id(status, status_text, headers, body, request_id);
         Self::new(tunnel_id, client_id, message)
     }
 
@@ -357,6 +384,19 @@ impl TunnelMessage {
             &self.message.payload,
             MessagePayload::Auth(_) | MessagePayload::Control(_) | MessagePayload::Stats(_)
         )
+    }
+
+    /// Get request ID from HTTP payload
+    pub fn get_request_id(&self) -> Option<String> {
+        match &self.message.payload {
+            MessagePayload::Http(HttpPayload::Request { request_id, .. }) => {
+                Some(request_id.clone())
+            }
+            MessagePayload::Http(HttpPayload::Response { request_id, .. }) => {
+                Some(request_id.clone())
+            }
+            _ => None,
+        }
     }
 }
 

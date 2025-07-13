@@ -250,6 +250,19 @@ impl HttpMessage {
         Self::new(connection_id, message)
     }
 
+    /// Create HTTP request message with request ID
+    pub fn http_request_with_id(
+        connection_id: String,
+        method: String,
+        url: String,
+        headers: HashMap<String, String>,
+        body: Option<Vec<u8>>,
+        request_id: String,
+    ) -> Self {
+        let message = ProtocolMessage::http_request_with_id(method, url, headers, body, request_id);
+        Self::new(connection_id, message)
+    }
+
     /// Create HTTP response message
     pub fn http_response(
         connection_id: String,
@@ -259,6 +272,20 @@ impl HttpMessage {
         body: Option<Vec<u8>>,
     ) -> Self {
         let message = ProtocolMessage::http_response(status, status_text, headers, body);
+        Self::new(connection_id, message)
+    }
+
+    /// Create HTTP response message with request ID
+    pub fn http_response_with_id(
+        connection_id: String,
+        status: u16,
+        status_text: String,
+        headers: HashMap<String, String>,
+        body: Option<Vec<u8>>,
+        request_id: String,
+    ) -> Self {
+        let message =
+            ProtocolMessage::http_response_with_id(status, status_text, headers, body, request_id);
         Self::new(connection_id, message)
     }
 
@@ -327,6 +354,42 @@ impl HttpMessage {
             Some((method.clone(), url.clone(), headers.clone()))
         } else {
             None
+        }
+    }
+
+    /// Extract HTTP request information with request ID
+    pub fn extract_request_info_with_id(
+        &self,
+    ) -> Option<(String, String, HashMap<String, String>, String)> {
+        if let MessagePayload::Http(HttpPayload::Request {
+            method,
+            url,
+            headers,
+            request_id,
+            ..
+        }) = &self.message.payload
+        {
+            Some((
+                method.clone(),
+                url.clone(),
+                headers.clone(),
+                request_id.clone(),
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// Get request ID from HTTP payload
+    pub fn get_request_id(&self) -> Option<String> {
+        match &self.message.payload {
+            MessagePayload::Http(HttpPayload::Request { request_id, .. }) => {
+                Some(request_id.clone())
+            }
+            MessagePayload::Http(HttpPayload::Response { request_id, .. }) => {
+                Some(request_id.clone())
+            }
+            _ => None,
         }
     }
 

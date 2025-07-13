@@ -266,6 +266,29 @@ Your local server should return appropriate HTTP status codes:
 
 ## Message Handling Details
 
+### Important: Request ID Handling
+
+**Critical Requirement**: The cloud server includes a unique `requestId` field in every HTTP request message that must be preserved and returned in the response. This ID is used by the server to route responses back to the correct requester.
+
+#### Request ID Format
+
+- **Field Name**: `requestId`
+- **Example Value**: `"RQT7C08F54C72A8"`
+- **Location**: Required field within the HTTP payload (inside the `data` section of HTTP Request/Response messages)
+- **Type**: Required String (not optional)
+- **Purpose**: Links responses to their corresponding requests and enables proper routing by the cloud server
+
+#### Request ID Flow
+
+```text
+1. Cloud Server → Proxy: HTTP request with requestId: "RQT7C08F54C72A8"
+2. Proxy → Local Server: Forward request (automatically adds X-Request-ID header)
+3. Local Server → Proxy: HTTP response
+4. Proxy → Cloud Server: Response with same requestId: "RQT7C08F54C72A8"
+```
+
+⚠️ **Warning**: The requestId is now a required field in all HTTP payloads. The proxy automatically preserves and forwards this ID throughout the request-response cycle. Failing to maintain the requestId will cause the cloud server to be unable to route responses back to clients, resulting in timeouts and failed requests.
+
 ### 1. HTTP Request Processing
 
 When the proxy receives an HTTP request from the cloud:
@@ -273,6 +296,7 @@ When the proxy receives an HTTP request from the cloud:
 ```json
 {
   "step": "incoming_request",
+  "requestId": "RQT7C08F54C72A8",
   "tunnel_message": {
     "envelope": {
       "tunnel_id": "tunnel_123",
@@ -294,7 +318,10 @@ When the proxy receives an HTTP request from the cloud:
             "content-type": "application/json",
             "authorization": "Bearer token123"
           },
-          "body": "eyJuYW1lIjoiSm9obiBEb2UifQ=="
+          "body": {
+            "name": "John Doe"
+          },
+          "requestId": "RQT7C08F54C72A8"
         }
       }
     }
@@ -310,10 +337,17 @@ Host: localhost:3000
 Content-Type: application/json
 Authorization: Bearer token123
 X-Forwarded-By: pori-proxy
-X-Request-ID: req_789
+X-Request-ID: RQT7C08F54C72A8
 
 {"name": "John Doe"}
 ```
+
+**Implementation Details**: The proxy automatically:
+
+- Extracts the `requestId` from the incoming HTTP payload (required field)
+- Adds the `X-Request-ID` header with the `requestId` value for local server tracking
+- Adds the `X-Forwarded-By: pori-proxy` header to identify the proxy
+- Preserves the `requestId` in all response messages back to the cloud server
 
 ### 2. HTTP Response Processing
 
@@ -332,6 +366,7 @@ The proxy converts this back to a tunnel message:
 ```json
 {
   "step": "outgoing_response",
+  "requestId": "RQT7C08F54C72A8",
   "tunnel_message": {
     "envelope": {
       "tunnel_id": "tunnel_123",
@@ -354,13 +389,20 @@ The proxy converts this back to a tunnel message:
             "content-type": "application/json",
             "location": "/api/users/123"
           },
-          "body": "eyJpZCI6MTIzLCJuYW1lIjoiSm9obiBEb2UiLCJjcmVhdGVkX2F0IjoiMjAyNS0wNy0xM1QxMDozMDowMFoifQ=="
+          "body": {
+            "id": 123,
+            "name": "John Doe",
+            "created_at": "2025-07-13T10:30:00Z"
+          },
+          "requestId": "RQT7C08F54C72A8"
         }
       }
     }
   }
 }
 ```
+
+**Critical**: Notice that the response includes the same `requestId` ("RQT7C08F54C72A8") that was in the original request. This is essential for the cloud server to route the response correctly.
 
 ### 3. Error Handling
 
@@ -378,6 +420,7 @@ The proxy forwards this as:
 ```json
 {
   "step": "error_response",
+  "requestId": "RQT7C08F54C72A8",
   "tunnel_message": {
     "envelope": {
       "tunnel_id": "tunnel_123",
@@ -399,7 +442,11 @@ The proxy forwards this as:
           "headers": {
             "content-type": "application/json"
           },
-          "body": "eyJlcnJvciI6IkludmFsaWQgdXNlciBkYXRhIiwiZGV0YWlscyI6Ik5hbWUgaXMgcmVxdWlyZWQifQ=="
+          "body": {
+            "error": "Invalid user data",
+            "details": "Name is required"
+          },
+          "requestId": "RQT7C08F54C72A8"
         }
       }
     }
@@ -407,11 +454,25 @@ The proxy forwards this as:
 }
 ```
 
+## Implementation Notes
+
+### RequestId Handling
+
+As of the current implementation, `requestId` is a **required field** in all HTTP Request and Response payloads. The system automatically:
+
+- Extracts `requestId` from incoming HTTP requests within the payload data
+- Preserves the `requestId` throughout the proxy forwarding process
+- Automatically injects an `X-Request-ID` header into forwarded HTTP requests
+- Includes the original `requestId` in all response messages back to the tunnel
+
+This ensures complete request traceability and correlation between the cloud server, proxy, and local server components.
+
 ## Security Considerations
 
 ### 1. Authentication & Authorization
 
 #### Token-Based Authentication
+
 ```yaml
 websocket:
   token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -419,6 +480,7 @@ websocket:
 ```
 
 #### Certificate-Based Authentication
+
 ```yaml
 websocket:
   security:
@@ -502,6 +564,7 @@ curl http://localhost:7616/api/errors
 ### 1. Common Issues
 
 #### Connection Problems
+
 ```text
 Problem: WebSocket connection fails
 Solutions:
@@ -512,6 +575,7 @@ Solutions:
 ```
 
 #### Local Server Unreachable
+
 ```text
 Problem: Cannot connect to local server
 Solutions:
@@ -522,6 +586,7 @@ Solutions:
 ```
 
 #### High Error Rates
+
 ```text
 Problem: Many 5xx errors
 Solutions:

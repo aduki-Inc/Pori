@@ -1,6 +1,8 @@
-use crate::protocol::tunnel::TunnelMessage;
-use crate::protocol::messages::{MessagePayload, HttpPayload, AuthPayload, ControlPayload, StatsPayload, ErrorCategory};
 use crate::protocol::http::HttpMessage;
+use crate::protocol::messages::{
+    AuthPayload, ControlPayload, ErrorCategory, HttpPayload, MessagePayload, StatsPayload,
+};
+use crate::protocol::tunnel::TunnelMessage;
 use crate::{utils::http::get_status_description, AppState, ConnectionStatus, DashboardEvent};
 use anyhow::Result;
 use serde_json::json;
@@ -17,7 +19,7 @@ pub struct TunnelHandler {
 
 impl TunnelHandler {
     pub fn new(app_state: Arc<AppState>) -> Self {
-        Self { 
+        Self {
             app_state,
             tunnel_id: "default-tunnel".to_string(),
             client_id: "pori-client".to_string(),
@@ -78,43 +80,61 @@ impl TunnelHandler {
 
             MessagePayload::Http(http_payload) => {
                 match http_payload {
-                    HttpPayload::Request { method, url, headers, body, .. } => {
+                    HttpPayload::Request {
+                        method,
+                        url,
+                        headers,
+                        body,
+                        request_id,
+                        ..
+                    } => {
                         // Parse URL to extract path and query parameters
                         let (path, _query_params) = self.parse_url_components(url);
                         let body_size = body.as_ref().map(|b| b.len()).unwrap_or(0);
-                        let request_id = &message.message.metadata.id;
+                        let message_id = &message.message.metadata.id;
 
-                        // Also log in simple format for quick reading
+                        // The request ID is now required, so we can use it directly
+                        let cloud_request_id = request_id.clone();
+
+                        // Log with both IDs for clarity
                         crate::proxy_log!(
-                            "REQUEST [{}] {} {} (Body: {} bytes)",
-                            request_id,
+                            "REQUEST [{}] {} {} (Body: {} bytes) [Cloud RequestID: {}]",
+                            message_id,
                             method,
                             path,
-                            body_size
+                            body_size,
+                            cloud_request_id
                         );
 
                         debug!("Request headers: {:?}", headers);
 
-                        // Create HTTP message for proxy
-                        let http_message = HttpMessage::http_request(
-                            request_id.clone(),
+                        // Create HTTP message for proxy with the cloud request ID
+                        let http_message = HttpMessage::http_request_with_id(
+                            message_id.clone(),
                             method.clone(),
                             url.clone(),
                             headers.clone(),
                             body.clone(),
+                            cloud_request_id.clone(),
                         );
 
                         if let Err(e) = self.app_state.proxy_tx.send(http_message) {
                             error!("Failed to forward an HTTP request to proxy: {}", e);
 
                             // Log error response
-                            self.log_response(request_id, 500, "Internal Server Error", "Internal proxy error");
+                            self.log_response(
+                                &message_id,
+                                500,
+                                "Internal Server Error",
+                                "Internal proxy error",
+                            );
 
-                            // Send error response
-                            return Ok(Some(self.create_error_response(
-                                request_id.clone(),
+                            // Send error response with the original request ID
+                            return Ok(Some(self.create_error_response_with_request_id(
+                                message_id.clone(),
                                 "Internal proxy error".to_string(),
                                 Some(500),
+                                cloud_request_id.clone(),
                             )));
                         }
 
@@ -132,10 +152,11 @@ impl TunnelHandler {
                             .await;
 
                         crate::proxy_log!(
-                            "Request forwarded to local server: {} {} [{}]",
+                            "Request forwarded to local server: {} {} [Message ID: {}, Cloud RequestID: {}]",
                             method,
                             path,
-                            request_id
+                            message_id,
+                            cloud_request_id
                         );
 
                         Ok(None)
@@ -188,7 +209,9 @@ impl TunnelHandler {
                         debug!("Ignoring pong message - server doesn't support pongs");
                         Ok(None)
                     }
-                    ControlPayload::Status { status, message, .. } => {
+                    ControlPayload::Status {
+                        status, message, ..
+                    } => {
                         info!("Server status: {:?} - {:?}", status, message);
 
                         // Update connection status
@@ -263,8 +286,12 @@ impl TunnelHandler {
         status_text: String,
         headers: HashMap<String, String>,
         body: Option<Vec<u8>>,
+        cloud_request_id: String,
     ) -> TunnelMessage {
-        debug!("Creating an HTTP response for request ID: {}", request_id);
+        debug!(
+            "Creating an HTTP response for request ID: {}, Cloud Request ID: {}",
+            request_id, cloud_request_id
+        );
 
         // Notify dashboard
         let body_size = body.as_ref().map(|b| b.len()).unwrap_or(0);
@@ -281,13 +308,14 @@ impl TunnelHandler {
             })
             .await;
 
-        TunnelMessage::http_response(
+        TunnelMessage::http_response_with_id(
             self.tunnel_id.clone(),
             self.client_id.clone(),
             status,
             status_text,
             headers,
             body,
+            cloud_request_id,
         )
     }
 
@@ -297,6 +325,7 @@ impl TunnelHandler {
         request_id: String,
         error: String,
         status_code: Option<u16>,
+        cloud_request_id: String,
     ) -> TunnelMessage {
         error!("Proxy error for request {}: {}", request_id, error);
 
@@ -313,7 +342,7 @@ impl TunnelHandler {
             })
             .await;
 
-        self.create_error_response(request_id, error, status_code)
+        self.create_error_response_with_request_id(request_id, error, status_code, cloud_request_id)
     }
 
     /// Create error response
@@ -326,10 +355,41 @@ impl TunnelHandler {
         TunnelMessage::error(
             self.tunnel_id.clone(),
             self.client_id.clone(),
-            status_code.map(|c| c.to_string()).unwrap_or_else(|| "UNKNOWN".to_string()),
+            status_code
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "UNKNOWN".to_string()),
             error,
             ErrorCategory::Internal,
             Some(request_id),
+        )
+    }
+
+    /// Create error response with request ID
+    fn create_error_response_with_request_id(
+        &self,
+        _request_id: String,
+        error: String,
+        status_code: Option<u16>,
+        cloud_request_id: String,
+    ) -> TunnelMessage {
+        // For now, create an HTTP error response instead of a generic error
+        let status = status_code.unwrap_or(500);
+        let status_text = crate::utils::http::get_status_description(status);
+
+        let mut headers = std::collections::HashMap::new();
+        headers.insert(
+            "content-type".to_string(),
+            "text/plain; charset=utf-8".to_string(),
+        );
+
+        TunnelMessage::http_response_with_id(
+            self.tunnel_id.clone(),
+            self.client_id.clone(),
+            status,
+            status_text,
+            headers,
+            Some(error.into_bytes()),
+            cloud_request_id,
         )
     }
 
@@ -514,7 +574,8 @@ mod tests {
         assert!(response.is_none());
 
         // Test pong handling too
-        let pong_message = TunnelMessage::pong("tunnel-1".to_string(), "client-1".to_string(), 123456);
+        let pong_message =
+            TunnelMessage::pong("tunnel-1".to_string(), "client-1".to_string(), 123456);
         let response = handler.handle_message(pong_message).await.unwrap();
 
         // Pong messages are also ignored (no response expected)

@@ -3,10 +3,10 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, instrument, warn};
 
-use crate::protocol::http::HttpMessage;
-use crate::protocol::tunnel::TunnelMessage;
-use crate::protocol::messages::{MessagePayload, HttpPayload};
 use super::client::{LocalServerClient, LocalServerResponse};
+use crate::protocol::http::HttpMessage;
+use crate::protocol::messages::{HttpPayload, MessagePayload};
+use crate::protocol::tunnel::TunnelMessage;
 use crate::{local_log, utils::http::get_status_description, AppState, DashboardEvent};
 
 /// HTTP proxy forwarder that forwards requests to a local server
@@ -50,7 +50,9 @@ impl ProxyForwarder {
 
         while let Some(message) = message_rx.recv().await {
             // Extract HTTP request information from the message
-            if let Some((method, url, headers)) = message.extract_request_info() {
+            if let Some((method, url, headers, cloud_request_id)) =
+                message.extract_request_info_with_id()
+            {
                 let body = match &message.message.payload {
                     MessagePayload::Http(HttpPayload::Request { body, .. }) => body.clone(),
                     _ => None,
@@ -61,7 +63,14 @@ impl ProxyForwarder {
                 let request_id = message.request_id().to_string();
                 tokio::spawn(async move {
                     if let Err(e) = forwarder
-                        .handle_http_request(request_id, method, url, headers, body)
+                        .handle_http_request(
+                            request_id,
+                            method,
+                            url,
+                            headers,
+                            body,
+                            cloud_request_id,
+                        )
                         .await
                     {
                         error!("Failed to handle HTTP request: {}", e);
@@ -85,6 +94,7 @@ impl ProxyForwarder {
         url: String,
         headers: std::collections::HashMap<String, String>,
         body: Option<Vec<u8>>,
+        cloud_request_id: String,
     ) -> Result<()> {
         let start_time = std::time::Instant::now();
 
@@ -98,16 +108,22 @@ impl ProxyForwarder {
         let path = self.extract_path_from_url(&url)?;
 
         local_log!(
-            "Forwarding request to local server: {} {} (ID: {})",
+            "Forwarding request to local server: {} {} (ID: {}, Cloud RequestID: {})",
             method,
             path,
-            request_id
+            request_id,
+            cloud_request_id
         );
 
         debug!(
-            "Processing request: {} {} (ID: {})",
-            method, path, request_id
+            "Processing request: {} {} (ID: {}, Cloud RequestID: {})",
+            method, path, request_id, cloud_request_id
         );
+
+        // Add X-Request-ID header with the cloud request ID for tracking
+        let mut headers_with_request_id = headers.clone();
+        headers_with_request_id.insert("X-Request-ID".to_string(), cloud_request_id.clone());
+        headers_with_request_id.insert("X-Forwarded-By".to_string(), "pori-proxy".to_string());
 
         // Notify dashboard
         let _ = self
@@ -119,7 +135,7 @@ impl ProxyForwarder {
         let result = tokio::time::timeout(
             self.app_state.settings.local_server.timeout,
             self.local_client
-                .forward_request(&method, &path, headers, body),
+                .forward_request(&method, &path, headers_with_request_id, body),
         )
         .await;
 
@@ -128,8 +144,15 @@ impl ProxyForwarder {
         match result {
             Ok(Ok(response)) => {
                 // Successfully received response from a local server
-                self.handle_successful_response(request_id, method, path, response, duration)
-                    .await?;
+                self.handle_successful_response(
+                    request_id,
+                    method,
+                    path,
+                    response,
+                    duration,
+                    cloud_request_id,
+                )
+                .await?;
             }
             Ok(Err(e)) => {
                 // Check if it's a connection error or server error
@@ -140,17 +163,31 @@ impl ProxyForwarder {
                     || error_string.contains("network")
                 {
                     // Connection/network error - local server is unreachable
-                    self.handle_connection_error(request_id, method, path, e, duration)
-                        .await?;
+                    self.handle_connection_error(
+                        request_id,
+                        method,
+                        path,
+                        e,
+                        duration,
+                        cloud_request_id,
+                    )
+                    .await?;
                 } else {
                     // Other server error (e.g., HTTP error responses)
-                    self.handle_server_error(request_id, method, path, e, duration)
-                        .await?;
+                    self.handle_server_error(
+                        request_id,
+                        method,
+                        path,
+                        e,
+                        duration,
+                        cloud_request_id,
+                    )
+                    .await?;
                 }
             }
             Err(_) => {
                 // Request timed out
-                self.handle_timeout_error(request_id, method, path, duration)
+                self.handle_timeout_error(request_id, method, path, duration, cloud_request_id)
                     .await?;
             }
         }
@@ -166,6 +203,7 @@ impl ProxyForwarder {
         path: String,
         response: LocalServerResponse,
         duration: std::time::Duration,
+        cloud_request_id: String,
     ) -> Result<()> {
         // Update stats
         {
@@ -200,7 +238,8 @@ impl ProxyForwarder {
         );
 
         // Send response back via WebSocket
-        self.send_response(request_id, response).await?;
+        self.send_response(request_id, response, cloud_request_id)
+            .await?;
 
         // Notify dashboard of successful response
         let _ = self
@@ -219,6 +258,7 @@ impl ProxyForwarder {
         path: String,
         error: anyhow::Error,
         duration: std::time::Duration,
+        cloud_request_id: String,
     ) -> Result<()> {
         // Update error stats
         {
@@ -246,6 +286,7 @@ impl ProxyForwarder {
             502,
             "Bad Gateway",
             &format!("Local server error: {}", error),
+            cloud_request_id,
         )
         .await?;
 
@@ -268,6 +309,7 @@ impl ProxyForwarder {
         method: String,
         path: String,
         duration: std::time::Duration,
+        cloud_request_id: String,
     ) -> Result<()> {
         // Update error stats
         {
@@ -298,6 +340,7 @@ impl ProxyForwarder {
                 "Local server did not respond within {:?}",
                 self.app_state.settings.local_server.timeout
             ),
+            cloud_request_id,
         )
         .await?;
 
@@ -314,7 +357,12 @@ impl ProxyForwarder {
     }
 
     /// Send a successful response back via WebSocket
-    async fn send_response(&self, request_id: String, response: LocalServerResponse) -> Result<()> {
+    async fn send_response(
+        &self,
+        request_id: String,
+        response: LocalServerResponse,
+        cloud_request_id: String,
+    ) -> Result<()> {
         let body_size = response.body.as_ref().map(|b| b.len()).unwrap_or(0);
         let status_description = get_status_description(response.status);
 
@@ -328,13 +376,14 @@ impl ProxyForwarder {
         // Log response headers for debugging
         debug!("Response headers: {:?}", response.headers);
 
-        let tunnel_message = TunnelMessage::http_response(
+        let tunnel_message = TunnelMessage::http_response_with_id(
             "default-tunnel".to_string(),
             "default-client".to_string(),
             response.status,
             response.status_text,
             response.headers,
             response.body,
+            cloud_request_id,
         );
 
         // Send via WebSocket to a proxy server
@@ -360,6 +409,7 @@ impl ProxyForwarder {
         status: u16,
         status_text: &str,
         error_message: &str,
+        cloud_request_id: String,
     ) -> Result<()> {
         crate::proxy_log!(
             "Sending error response to proxy server: {} {} - {} (ID: {})",
@@ -378,13 +428,14 @@ impl ProxyForwarder {
 
         let body = Some(error_message.as_bytes().to_vec());
 
-        let tunnel_message = TunnelMessage::http_response(
+        let tunnel_message = TunnelMessage::http_response_with_id(
             "default-tunnel".to_string(),
             "default-client".to_string(),
             status,
             status_text.to_string(),
             headers,
             body,
+            cloud_request_id,
         );
 
         if let Err(e) = self.app_state.websocket_tx.send(tunnel_message) {
@@ -410,6 +461,7 @@ impl ProxyForwarder {
         path: String,
         error: anyhow::Error,
         duration: std::time::Duration,
+        cloud_request_id: String,
     ) -> Result<()> {
         // Update error stats
         {
@@ -437,6 +489,7 @@ impl ProxyForwarder {
             503,
             "Service Unavailable",
             &format!("Local server is unreachable: {}", error),
+            cloud_request_id,
         )
         .await?;
 

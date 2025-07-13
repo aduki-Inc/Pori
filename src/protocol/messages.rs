@@ -113,6 +113,8 @@ pub enum HttpPayload {
         headers: HashMap<String, String>,
         body: Option<Vec<u8>>,
         query_params: HashMap<String, String>,
+        #[serde(rename = "requestId")]
+        request_id: String,
     },
     /// HTTP response
     Response {
@@ -120,6 +122,8 @@ pub enum HttpPayload {
         status_text: String,
         headers: HashMap<String, String>,
         body: Option<Vec<u8>>,
+        #[serde(rename = "requestId")]
+        request_id: String,
     },
     /// HTTP upgrade request
     Upgrade {
@@ -323,6 +327,37 @@ impl ProtocolMessage {
                 headers,
                 body,
                 query_params,
+                request_id: Uuid::new_v4().to_string(), // Generate a default requestId
+            }),
+        )
+    }
+
+    /// Create an HTTP request message with request ID
+    pub fn http_request_with_id(
+        method: String,
+        url: String,
+        headers: HashMap<String, String>,
+        body: Option<Vec<u8>>,
+        request_id: String,
+    ) -> Self {
+        let mut query_params = HashMap::new();
+
+        // Extract query parameters from URL
+        if let Ok(parsed_url) = url::Url::parse(&url) {
+            for (key, value) in parsed_url.query_pairs() {
+                query_params.insert(key.to_string(), value.to_string());
+            }
+        }
+
+        Self::new(
+            "http_request".to_string(),
+            MessagePayload::Http(HttpPayload::Request {
+                method,
+                url,
+                headers,
+                body,
+                query_params,
+                request_id,
             }),
         )
     }
@@ -341,6 +376,27 @@ impl ProtocolMessage {
                 status_text,
                 headers,
                 body,
+                request_id: Uuid::new_v4().to_string(), // Generate a default requestId
+            }),
+        )
+    }
+
+    /// Create an HTTP response message with request ID
+    pub fn http_response_with_id(
+        status: u16,
+        status_text: String,
+        headers: HashMap<String, String>,
+        body: Option<Vec<u8>>,
+        request_id: String,
+    ) -> Self {
+        Self::new(
+            "http_response".to_string(),
+            MessagePayload::Http(HttpPayload::Response {
+                status,
+                status_text,
+                headers,
+                body,
+                request_id,
             }),
         )
     }
