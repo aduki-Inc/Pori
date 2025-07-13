@@ -177,6 +177,7 @@ impl LocalServerClient {
                 | "te"
                 | "trailers"
                 | "transfer-encoding"
+                | "content-length"  // Skip content-length to let reqwest set it correctly
         )
     }
 

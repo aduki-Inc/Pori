@@ -121,6 +121,19 @@ impl ProxyForwarder {
             method, path, request_id, cloud_request_id
         );
 
+        // Debug log the body content and headers
+        if let Some(ref body_data) = body {
+            debug!("Request body size: {} bytes", body_data.len());
+            if let Ok(body_str) = std::str::from_utf8(body_data) {
+                debug!("Request body content: {}", body_str);
+            } else {
+                debug!("Request body contains binary data");
+            }
+        } else {
+            debug!("Request has no body");
+        }
+        debug!("Request headers: {:?}", headers);
+
         // Add X-Request-ID header with the cloud request ID for tracking (if not already present)
         let mut headers_with_request_id = headers.clone();
 

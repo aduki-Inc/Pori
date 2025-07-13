@@ -116,6 +116,7 @@ pub enum HttpPayload {
         method: String,
         url: String,
         headers: HashMap<String, String>,
+        #[serde(with = "body_serializer", default)]
         body: Option<Vec<u8>>,
         #[serde(default)]
         query_params: HashMap<String, String>,
@@ -127,6 +128,7 @@ pub enum HttpPayload {
         status: u16,
         status_text: String,
         headers: HashMap<String, String>,
+        #[serde(with = "body_serializer", default)]
         body: Option<Vec<u8>>,
         #[serde(rename = "requestId")]
         request_id: String,
@@ -570,6 +572,88 @@ impl MessageMetadata {
     }
 }
 
+/// Custom serializer for body field that can handle both JSON objects and byte arrays
+mod body_serializer {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde_json::Value;
+
+    pub fn serialize<S>(value: &Option<Vec<u8>>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match value {
+            Some(bytes) => {
+                // Try to parse as JSON first, fallback to raw bytes if that fails
+                if let Ok(json_str) = std::str::from_utf8(bytes) {
+                    if let Ok(json_value) = serde_json::from_str::<Value>(json_str) {
+                        json_value.serialize(serializer)
+                    } else {
+                        // Serialize as byte array
+                        bytes.serialize(serializer)
+                    }
+                } else {
+                    // Serialize as byte array
+                    bytes.serialize(serializer)
+                }
+            }
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Vec<u8>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        let value: Option<Value> = Option::deserialize(deserializer)?;
+        match value {
+            Some(val) => match val {
+                // Handle case where body is sent as JSON object (but not array)
+                Value::Object(_) => {
+                    let json_str = serde_json::to_string(&val).map_err(|e| {
+                        D::Error::custom(format!("Failed to serialize JSON body: {}", e))
+                    })?;
+                    Ok(Some(json_str.into_bytes()))
+                }
+                // Handle case where body is sent as a string
+                Value::String(s) => Ok(Some(s.into_bytes())),
+                // Handle case where body is sent as byte array
+                Value::Array(arr) => {
+                    let bytes: Result<Vec<u8>, _> = arr
+                        .into_iter()
+                        .map(|v| match v {
+                            Value::Number(n) => {
+                                if let Some(byte_val) = n.as_u64() {
+                                    if byte_val <= 255 {
+                                        Ok(byte_val as u8)
+                                    } else {
+                                        Err(D::Error::custom("Invalid byte value"))
+                                    }
+                                } else {
+                                    Err(D::Error::custom("Invalid byte value"))
+                                }
+                            }
+                            _ => Err(D::Error::custom("Invalid byte array format")),
+                        })
+                        .collect();
+                    Ok(Some(bytes.map_err(|e| D::Error::custom(e))?))
+                }
+                // Handle null values
+                Value::Null => Ok(None),
+                // For other types, try to convert to string then bytes
+                _ => {
+                    let json_str = serde_json::to_string(&val).map_err(|e| {
+                        D::Error::custom(format!("Failed to serialize body value: {}", e))
+                    })?;
+                    Ok(Some(json_str.into_bytes()))
+                }
+            },
+            None => Ok(None),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -615,5 +699,71 @@ mod tests {
         );
         assert_eq!(message.metadata.priority, MessagePriority::High);
         assert_eq!(message.metadata.tags, vec!["test".to_string()]);
+    }
+
+    #[test]
+    fn test_json_body_deserialization() {
+        use crate::protocol::tunnel::TunnelMessage;
+
+        let json_with_object_body = r#"{
+            "envelope": {
+                "tunnel_id": "tunnel_1752429342302",
+                "client_id": "client_msg_9b0d807ecc58922f"
+            },
+            "message": {
+                "metadata": {
+                    "id": "msg_9b0d807ecc58922f",
+                    "message_type": "http_request",
+                    "version": "0.1.45",
+                    "timestamp": 1752429342302,
+                    "priority": "normal",
+                    "delivery_mode": "at_least_once",
+                    "encoding": "json"
+                },
+                "payload": {
+                    "kind": "HTTP",
+                    "data": {
+                        "kind": "Request",
+                        "method": "POST",
+                        "url": "/api/v1/M0X/stk/callback/test",
+                        "headers": {
+                            "content-type": "application/json"
+                        },
+                        "body": {
+                            "Body": {
+                                "stkCallback": {
+                                    "MerchantRequestID": "29115-34620561-1",
+                                    "CheckoutRequestID": "ws_CO_191220191020363925",
+                                    "ResultCode": 0
+                                }
+                            }
+                        },
+                        "requestId": "R0X88528F3E97F3"
+                    }
+                }
+            }
+        }"#;
+
+        let result = TunnelMessage::from_json(json_with_object_body);
+        assert!(
+            result.is_ok(),
+            "Failed to parse tunnel message with JSON body: {:?}",
+            result.err()
+        );
+
+        let tunnel_message = result.unwrap();
+        if let MessagePayload::Http(HttpPayload::Request { body, .. }) =
+            &tunnel_message.message.payload
+        {
+            assert!(body.is_some(), "Body should not be None");
+            let body_bytes = body.as_ref().unwrap();
+            let body_str = std::str::from_utf8(body_bytes).expect("Body should be valid UTF-8");
+            assert!(
+                body_str.contains("stkCallback"),
+                "Body should contain the original JSON content"
+            );
+        } else {
+            panic!("Expected HTTP Request payload");
+        }
     }
 }
