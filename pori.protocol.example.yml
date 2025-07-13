@@ -1,0 +1,190 @@
+# Example configuration with new protocol settings
+version: "1.0.0"
+
+# Protocol configuration
+protocol:
+  version: "1.0.0"
+  compression:
+    enabled: true
+    algorithm: "gzip"
+    level: 6
+    min_size_threshold: 1024
+  security:
+    encryption_enabled: false
+    signature_validation: false
+    allowed_origins:
+      - "*"
+    rate_limiting:
+      enabled: true
+      requests_per_minute: 1000
+      burst_size: 50
+      block_duration_seconds: 300
+  timeouts:
+    connection_timeout: 30
+    request_timeout: 60
+    response_timeout: 30
+    ping_timeout: 10
+    auth_timeout: 15
+  limits:
+    max_message_size: 16777216  # 16MB
+    max_header_size: 8192       # 8KB
+    max_body_size: 16777216     # 16MB
+    max_concurrent_requests: 100
+    max_queue_size: 1000
+  features:
+    streaming_enabled: true
+    websocket_compression: true
+    http2_enabled: false
+    keep_alive_enabled: true
+    metrics_collection: true
+
+# WebSocket tunnel configuration
+tunnel:
+  settings:
+    keep_alive_interval: 30
+    ping_timeout: 10
+    max_idle_time: 300
+    buffer_size: 65536
+    enable_compression: true
+    enable_encryption: false
+  auth:
+    method: "token"
+    required_scopes: []
+    certificate_validation: false
+  network:
+    bind_address: "0.0.0.0"
+    port_range: [8000, 9000]
+    protocol_family: "dual"
+    tcp:
+      no_delay: true
+      keep_alive: true
+      keep_alive_timeout: 300
+      send_buffer_size: 65536
+      recv_buffer_size: 65536
+    websocket:
+      max_frame_size: 16777216
+      max_message_size: 16777216
+      enable_per_message_deflate: true
+      deflate_window_bits: 15
+      auto_fragment_size: 1048576
+  security:
+    tls:
+      enabled: false
+      verify_peer: false
+      protocols: ["TLSv1.2", "TLSv1.3"]
+    access_control:
+      allowed_origins: ["*"]
+      auth_required: false
+    rate_limiting:
+      enabled: false
+      requests_per_second: 100
+      burst_size: 10
+      window_size: 60
+      block_duration: 300
+
+# HTTP configuration for local server communication
+http:
+  timeouts:
+    connect_timeout: 10
+    request_timeout: 60
+    response_timeout: 30
+    keep_alive_timeout: 300
+  retry:
+    enabled: true
+    max_attempts: 3
+    base_delay: 1000
+    max_delay: 30000
+    backoff_multiplier: 2.0
+    retryable_status_codes: [429, 502, 503, 504]
+    retryable_errors: ["connection_timeout", "connection_refused", "dns_failure"]
+  cache:
+    enabled: false
+    max_size: 104857600  # 100MB
+    default_ttl: 300
+    respect_headers: ["cache-control", "expires", "etag", "last-modified"]
+    cacheable_methods: ["GET", "HEAD"]
+    cacheable_status_codes: [200, 203, 300, 301, 410]
+  connection:
+    pool:
+      max_connections_per_host: 10
+      max_idle_connections: 100
+      idle_timeout: 300
+      max_lifetime: 3600
+      enable_http2: false
+    tls:
+      verify_ssl: true
+      protocols: ["TLSv1.2", "TLSv1.3"]
+    proxy:
+      bypass: []
+
+# WebSocket client configuration
+websocket:
+  connection:
+    connect_timeout: 30
+    ping_interval: 30
+    pong_timeout: 10
+    max_idle_time: 300
+    reconnect:
+      enabled: true
+      max_attempts: 5
+      base_delay: 1000
+      max_delay: 30000
+      backoff_multiplier: 2.0
+      jitter_factor: 0.1
+    keep_alive:
+      enabled: true
+      ping_interval: 30
+      max_missed_pongs: 3
+  message:
+    max_frame_size: 16777216
+    max_message_size: 16777216
+    auto_fragment: true
+    fragment_size: 1048576
+    queue_size: 1000
+    ordering_enabled: false
+  security:
+    allowed_origins: ["*"]
+    header_validation:
+      max_header_size: 8192
+    rate_limiting:
+      enabled: false
+      messages_per_second: 100
+      burst_size: 10
+      bytes_per_second: 1048576
+      window_size: 60
+  extensions:
+    deflate:
+      enabled: true
+      server_max_window_bits: 15
+      client_max_window_bits: 15
+      server_no_context_takeover: false
+      client_no_context_takeover: false
+      compression_threshold: 1024
+
+# Legacy settings (still supported)
+websocket_old:
+  url: "wss://tunnel.example.com"
+  token: "your-auth-token"
+  timeout: 30
+  max_reconnects: 5
+  ping_interval: 30
+  pong_timeout: 10
+
+local_server:
+  url: "https://localhost:3000"
+  timeout: 60
+  verify_ssl: false
+  max_connections: 10
+  keep_alive: 60
+  connect_timeout: 10
+
+dashboard:
+  port: 7616
+  bind_address: "127.0.0.1"
+  enable_cors: true
+  static_file_cache: true
+
+logging:
+  level: "info"
+  format: "pretty"
+  enable_color: true

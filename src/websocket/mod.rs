@@ -1,5 +1,4 @@
 pub mod client;
-pub mod messages;
 pub mod reconnect;
 pub mod tunnel;
 
@@ -9,7 +8,7 @@ use tokio::sync::mpsc;
 use tracing::error;
 
 use crate::{proxy_log, AppState};
-use messages::TunnelMessage;
+use crate::protocol::tunnel::TunnelMessage;
 
 /// Run the WebSocket client component
 pub async fn run_websocket_client(

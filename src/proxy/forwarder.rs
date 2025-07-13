@@ -3,10 +3,10 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, instrument, warn};
 
-use super::{
-    client::{LocalServerClient, LocalServerResponse},
-    messages::ProxyMessage,
-};
+use crate::protocol::http::HttpMessage;
+use crate::protocol::tunnel::TunnelMessage;
+use crate::protocol::messages::{MessagePayload, HttpPayload};
+use super::client::{LocalServerClient, LocalServerResponse};
 use crate::{local_log, utils::http::get_status_description, AppState, DashboardEvent};
 
 /// HTTP proxy forwarder that forwards requests to a local server
@@ -45,41 +45,30 @@ impl ProxyForwarder {
 
     /// Main forwarder run loop
     #[instrument(skip(self, message_rx))]
-    pub async fn run(&self, mut message_rx: mpsc::UnboundedReceiver<ProxyMessage>) -> Result<()> {
+    pub async fn run(&self, mut message_rx: mpsc::UnboundedReceiver<HttpMessage>) -> Result<()> {
         local_log!("HTTP proxy forwarder started");
 
         while let Some(message) = message_rx.recv().await {
-            match message {
-                ProxyMessage::HttpRequest {
-                    id,
-                    method,
-                    url,
-                    headers,
-                    body,
-                } => {
-                    // Process request in the background to avoid blocking
-                    let forwarder = self.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = forwarder
-                            .handle_http_request(id, method, url, headers, body)
-                            .await
-                        {
-                            error!("Failed to handle HTTP request: {}", e);
-                        }
-                    });
-                }
+            // Extract HTTP request information from the message
+            if let Some((method, url, headers)) = message.extract_request_info() {
+                let body = match &message.message.payload {
+                    MessagePayload::Http(HttpPayload::Request { body, .. }) => body.clone(),
+                    _ => None,
+                };
 
-                ProxyMessage::Stats { .. } => {
-                    // Handle stats request
-                    debug!("Received stats request");
-                }
-
-                _ => {
-                    debug!(
-                        "Ignoring non-HTTP request message: {:?}",
-                        message.message_type()
-                    );
-                }
+                // Process request in the background to avoid blocking
+                let forwarder = self.clone();
+                let request_id = message.request_id().to_string();
+                tokio::spawn(async move {
+                    if let Err(e) = forwarder
+                        .handle_http_request(request_id, method, url, headers, body)
+                        .await
+                    {
+                        error!("Failed to handle HTTP request: {}", e);
+                    }
+                });
+            } else {
+                debug!("Ignoring non-HTTP request message");
             }
         }
 
@@ -339,8 +328,9 @@ impl ProxyForwarder {
         // Log response headers for debugging
         debug!("Response headers: {:?}", response.headers);
 
-        let tunnel_message = crate::websocket::messages::TunnelMessage::http_response(
-            request_id.clone(),
+        let tunnel_message = TunnelMessage::http_response(
+            "default-tunnel".to_string(),
+            "default-client".to_string(),
             response.status,
             response.status_text,
             response.headers,
@@ -388,8 +378,9 @@ impl ProxyForwarder {
 
         let body = Some(error_message.as_bytes().to_vec());
 
-        let tunnel_message = crate::websocket::messages::TunnelMessage::http_response(
-            request_id.clone(),
+        let tunnel_message = TunnelMessage::http_response(
+            "default-tunnel".to_string(),
+            "default-client".to_string(),
             status,
             status_text.to_string(),
             headers,

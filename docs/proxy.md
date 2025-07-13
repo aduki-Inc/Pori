@@ -1,946 +1,650 @@
-# HTTP Proxy Forwarder Implementation Guide
+# Pori Proxy Server Guide
 
-## Proxy Forwarder Architecture
+This document provides comprehensive instructions for configuring and understanding how the Pori proxy server handles messages and forwards them between cloud servers and local applications.
 
-### Purpose and Responsibilities
+## Overview
 
-The HTTP Proxy Forwarder is responsible for:
+The Pori proxy server acts as a bridge between:
 
-1. **Receiving HTTP requests** from WebSocket client (from cloud/proxy)
-2. **Forwarding requests** to local HTTPS server (e.g., localhost:3000)
-3. **Streaming responses** back to WebSocket client
-4. **Managing connections** to local server with pooling
-5. **Handling SSL/TLS** connections to local HTTPS servers
-6. **Error handling** and timeout management
+- **Cloud Server**: External WebSocket server that sends HTTP requests via tunnel
+- **Local Applications**: Your local web servers, APIs, or applications
+- **Dashboard**: Real-time monitoring and management interface
 
-### Component Structure
+### Architecture Flow
 
 ```text
-proxy/
-├── mod.rs          # Public module interface
-├── forwarder.rs    # Main HTTP proxy forwarding logic
-├── client.rs       # HTTP client for local server communication
-├── response.rs     # Response handling and streaming
-└── pool.rs         # Connection pooling for local server
+┌─────────────────┐    WebSocket     ┌─────────────────┐    HTTP      ┌─────────────────┐
+│   Cloud Server  │ ◄──────────────► │  Pori Proxy     │ ◄──────────► │ Local Server    │
+│                 │   TunnelMessage  │   (Forwarder)   │  HttpMessage │ (Your App)      │
+└─────────────────┘                  └─────────────────┘              └─────────────────┘
+                                              │
+                                              ▼ HTTP
+                                      ┌─────────────────┐
+                                      │    Dashboard    │
+                                      │  (Management)   │
+                                      └─────────────────┘
 ```
 
-## HTTP Client Configuration
+## Message Processing Pipeline
 
-### Local Server Client Setup
+### 1. Incoming Message Flow
 
-```rust
-// src/proxy/client.rs
-use anyhow::{Result, Context};
-use reqwest::{Client, ClientBuilder, Response};
-use std::collections::HashMap;
-use std::time::Duration;
-use tracing::{debug, warn, error, info};
-use url::Url;
-
-pub struct LocalServerClient {
-    client: Client,
-    base_url: Url,
-    timeout: Duration,
-}
-
-impl LocalServerClient {
-    pub fn new(base_url: Url, timeout: Duration, verify_ssl: bool) -> Result<Self> {
-        let client = ClientBuilder::new()
-            .timeout(timeout)
-            .connect_timeout(Duration::from_secs(10))
-            .danger_accept_invalid_certs(!verify_ssl) // For local development
-            .danger_accept_invalid_hostnames(!verify_ssl)
-            .pool_max_idle_per_host(10) // Connection pooling
-            .pool_idle_timeout(Duration::from_secs(60))
-            .tcp_keepalive(Duration::from_secs(30))
-            .http2_prior_knowledge() // Enable HTTP/2 if supported
-            .build()
-            .context("Failed to create HTTP client")?;
-
-        Ok(Self {
-            client,
-            base_url,
-            timeout,
-        })
-    }
-
-    pub async fn forward_request(
-        &self,
-        method: &str,
-        path: &str,
-        headers: HashMap<String, String>,
-        body: Option<Vec<u8>>,
-    ) -> Result<ProxyResponse> {
-        let url = self.build_url(path)?;
-        
-        debug!("Forwarding {} {} to local server", method, url);
-
-        // Build request
-        let mut request_builder = self.client.request(
-            method.parse().context("Invalid HTTP method")?,
-            url.clone(),
-        );
-
-        // Add headers (excluding host and other proxy-specific headers)
-        for (key, value) in headers {
-            if !self.should_skip_header(&key) {
-                request_builder = request_builder.header(&key, &value);
-            }
-        }
-
-        // Add body if present
-        if let Some(body_data) = body {
-            request_builder = request_builder.body(body_data);
-        }
-
-        // Send request
-        let start_time = std::time::Instant::now();
-        let response = request_builder.send().await
-            .context("Failed to send request to local server")?;
-
-        let duration = start_time.elapsed();
-        let status = response.status();
-        
-        info!(
-            "Local server response: {} {} -> {} ({:?})",
-            method, path, status, duration
-        );
-
-        // Convert response
-        let proxy_response = ProxyResponse::from_reqwest_response(response).await?;
-        
-        Ok(proxy_response)
-    }
-
-    fn build_url(&self, path: &str) -> Result<Url> {
-        let path = if path.starts_with('/') {
-            &path[1..]
-        } else {
-            path
-        };
-
-        self.base_url.join(path)
-            .context("Failed to build target URL")
-    }
-
-    fn should_skip_header(&self, header_name: &str) -> bool {
-        let header_lower = header_name.to_lowercase();
-        matches!(
-            header_lower.as_str(),
-            "host" | "connection" | "upgrade" | 
-            "proxy-connection" | "proxy-authorization" |
-            "te" | "trailers" | "transfer-encoding"
-        )
-    }
-}
-
-#[derive(Debug)]
-pub struct ProxyResponse {
-    pub status: u16,
-    pub status_text: String,
-    pub headers: HashMap<String, String>,
-    pub body: Option<Vec<u8>>,
-}
-
-impl ProxyResponse {
-    pub async fn from_reqwest_response(response: Response) -> Result<Self> {
-        let status = response.status();
-        let status_text = status.canonical_reason()
-            .unwrap_or("Unknown")
-            .to_string();
-
-        // Extract headers
-        let mut headers = HashMap::new();
-        for (key, value) in response.headers() {
-            if let Ok(value_str) = value.to_str() {
-                headers.insert(key.to_string(), value_str.to_string());
-            }
-        }
-
-        // Read body
-        let body = response.bytes().await
-            .context("Failed to read response body")?
-            .to_vec();
-
-        let body = if body.is_empty() { None } else { Some(body) };
-
-        Ok(Self {
-            status: status.as_u16(),
-            status_text,
-            headers,
-            body,
-        })
-    }
-}
+```text
+Cloud Server Request
+        │
+        ▼
+WebSocket Connection (TunnelMessage)
+        │
+        ▼
+Tunnel Handler (Authentication & Validation)
+        │
+        ▼
+Message Parser (Extract HTTP Details)
+        │
+        ▼
+HTTP Forwarder (Convert to Local HTTP)
+        │
+        ▼
+Local Server (Your Application)
+        │
+        ▼
+Response Handler (Convert Back to TunnelMessage)
+        │
+        ▼
+WebSocket Response (Back to Cloud)
 ```
 
-## Request Forwarding Logic
+### 2. Message Types Handled
 
-### Main Forwarder Implementation
+The proxy server processes these message types:
 
-```rust
-// src/proxy/forwarder.rs
-use anyhow::{Result, Context};
-use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
-use tracing::{info, warn, error, debug, instrument};
-use uuid::Uuid;
+#### A. Authentication Messages
 
-use crate::{AppState, TunnelMessage};
-use super::client::{LocalServerClient, ProxyResponse};
-use crate::websocket::messages::TunnelMessage as WsMessage;
+- **Purpose**: Establish secure connection with cloud server
+- **Format**: Token-based or challenge-response authentication
+- **Handler**: `TunnelHandler::handle_message()`
 
-pub struct ProxyForwarder {
-    local_client: LocalServerClient,
-    app_state: Arc<AppState>,
-    stats: Arc<RwLock<ProxyStats>>,
-}
+#### B. HTTP Request Messages
 
-#[derive(Debug, Default)]
-pub struct ProxyStats {
-    pub requests_processed: u64,
-    pub requests_successful: u64,
-    pub requests_failed: u64,
-    pub bytes_forwarded: u64,
-    pub average_response_time: f64,
-    pub active_requests: u64,
-}
+- **Purpose**: Forward HTTP requests from cloud to local server
+- **Format**: Complete HTTP request with method, URL, headers, body
+- **Handler**: `ProxyForwarder::forward_request()`
 
-impl ProxyForwarder {
-    pub fn new(local_client: LocalServerClient, app_state: Arc<AppState>) -> Self {
-        Self {
-            local_client,
-            app_state,
-            stats: Arc::new(RwLock::new(ProxyStats::default())),
-        }
-    }
+#### C. Control Messages
 
-    pub async fn start(&self, mut message_rx: mpsc::UnboundedReceiver<TunnelMessage>) -> Result<()> {
-        info!("Starting HTTP proxy forwarder");
+- **Purpose**: Health checks, configuration updates, statistics
+- **Format**: Ping/pong, status updates, configuration changes
+- **Handler**: `TunnelHandler::handle_message()`
 
-        while let Some(message) = message_rx.recv().await {
-            match message {
-                TunnelMessage::HttpRequest { id, method, url, headers, body } => {
-                    // Process request in background to avoid blocking
-                    let forwarder = self.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = forwarder.handle_http_request(id, method, url, headers, body).await {
-                            error!("Failed to handle HTTP request: {}", e);
-                        }
-                    });
-                }
-                _ => {
-                    debug!("Ignoring non-HTTP request message: {:?}", message);
-                }
-            }
-        }
+#### D. Error Messages
 
-        info!("Proxy forwarder shutting down");
-        Ok(())
-    }
+- **Purpose**: Error reporting and recovery
+- **Format**: Structured error with code, message, and recovery actions
+- **Handler**: Global error handler
 
-    #[instrument(skip(self, headers, body))]
-    async fn handle_http_request(
-        &self,
-        request_id: String,
-        method: String,
-        url: String,
-        headers: std::collections::HashMap<String, String>,
-        body: Option<Vec<u8>>,
-    ) -> Result<()> {
-        let start_time = std::time::Instant::now();
+## Configuration Guide
 
-        // Update active request count
-        {
-            let mut stats = self.stats.write().await;
-            stats.active_requests += 1;
-        }
+### 1. Basic Configuration
 
-        // Extract path from URL
-        let path = self.extract_path_from_url(&url)?;
+Create a `pori.yml` configuration file:
 
-        debug!(
-            "Processing request: {} {} (ID: {})",
-            method, path, request_id
-        );
+```yaml
+# Basic Proxy Configuration
+proxy:
+  # Local server settings
+  local_server:
+    host: "localhost"
+    port: 3000
+    protocol: "http"  # or "https"
+    timeout_seconds: 30
+    
+  # WebSocket tunnel settings
+  websocket:
+    url: "wss://your-cloud-server.com/tunnel"
+    token: "your-authentication-token"
+    reconnect_attempts: 5
+    reconnect_delay_seconds: 10
+    
+  # Dashboard settings
+  dashboard:
+    enabled: true
+    port: 7616
+    host: "localhost"
+    
+  # Logging configuration
+  logging:
+    level: "info"  # debug, info, warn, error
+    format: "json"  # json or plain
+```
 
-        // Notify dashboard
-        let _ = self.app_state.dashboard_tx.send(
-            crate::DashboardEvent::RequestForwarded(format!("{} {}", method, path))
-        );
+### 2. Advanced Configuration
 
-        // Forward request to local server
-        let result = self.local_client.forward_request(&method, &path, headers, body).await;
-
-        let duration = start_time.elapsed();
-
-        match result {
-            Ok(response) => {
-                // Update stats
-                {
-                    let mut stats = self.stats.write().await;
-                    stats.requests_processed += 1;
-                    stats.requests_successful += 1;
-                    stats.active_requests -= 1;
-                    
-                    if let Some(body) = &response.body {
-                        stats.bytes_forwarded += body.len() as u64;
-                    }
-
-                    // Update average response time
-                    let current_avg = stats.average_response_time;
-                    let count = stats.requests_processed as f64;
-                    stats.average_response_time = (current_avg * (count - 1.0) + duration.as_millis() as f64) / count;
-                }
-
-                // Send response back via WebSocket
-                self.send_response(request_id, response).await?;
-
-                info!(
-                    "Request completed successfully: {} {} -> {} ({:?})",
-                    method, path, response.status, duration
-                );
-            }
-            Err(e) => {
-                // Update error stats
-                {
-                    let mut stats = self.stats.write().await;
-                    stats.requests_processed += 1;
-                    stats.requests_failed += 1;
-                    stats.active_requests -= 1;
-                }
-
-                error!(
-                    "Request failed: {} {} -> Error: {} ({:?})",
-                    method, path, e, duration
-                );
-
-                // Send error response
-                self.send_error_response(request_id, 502, "Bad Gateway", &e.to_string()).await?;
-
-                // Notify dashboard
-                let _ = self.app_state.dashboard_tx.send(
-                    crate::DashboardEvent::Error(format!("Request failed: {}", e))
-                );
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn send_response(&self, request_id: String, response: ProxyResponse) -> Result<()> {
-        let ws_message = WsMessage::http_response(
-            request_id,
-            response.status,
-            response.status_text,
-            response.headers,
-            response.body,
-        );
-
-        // Get WebSocket message sender from app state
-        // This assumes the WebSocket client provides a way to send messages
-        // Implementation depends on how WebSocket client is integrated
-        if let Err(e) = self.send_to_websocket(ws_message).await {
-            warn!("Failed to send response to WebSocket: {}", e);
-        }
-
-        Ok(())
-    }
-
-    async fn send_error_response(
-        &self,
-        request_id: String,
-        status: u16,
-        status_text: &str,
-        error_message: &str,
-    ) -> Result<()> {
-        let mut headers = std::collections::HashMap::new();
-        headers.insert("content-type".to_string(), "text/plain".to_string());
-
-        let body = Some(error_message.as_bytes().to_vec());
-
-        let ws_message = WsMessage::http_response(
-            request_id,
-            status,
-            status_text.to_string(),
-            headers,
-            body,
-        );
-
-        if let Err(e) = self.send_to_websocket(ws_message).await {
-            warn!("Failed to send error response to WebSocket: {}", e);
-        }
-
-        Ok(())
-    }
-
-    async fn send_to_websocket(&self, message: WsMessage) -> Result<()> {
-        // This would need to be implemented based on how WebSocket client
-        // exposes its message sending capability
-        // For now, we'll assume there's a channel in app_state
+```yaml
+# Advanced Proxy Configuration
+proxy:
+  local_server:
+    host: "localhost"
+    port: 3000
+    protocol: "http"
+    timeout_seconds: 30
+    max_connections: 100
+    keep_alive: true
+    
+    # Request transformation
+    transform:
+      # Add headers to all requests
+      add_headers:
+        "X-Forwarded-By": "pori-proxy"
+        "X-Request-Source": "cloud"
         
-        // Convert to internal message type and send
-        // This is a placeholder - actual implementation depends on architecture
-        Ok(())
-    }
+      # Remove headers before forwarding
+      remove_headers:
+        - "X-Cloud-Internal"
+        - "Authorization"  # if handling auth differently
+        
+      # URL rewriting
+      url_rewrite:
+        from: "/api/v1/"
+        to: "/v1/"
+        
+  websocket:
+    url: "wss://your-cloud-server.com/tunnel"
+    token: "your-authentication-token"
+    
+    # Connection settings
+    connection:
+      reconnect_attempts: 5
+      reconnect_delay_seconds: 10
+      max_reconnect_delay_seconds: 300
+      ping_interval_seconds: 30
+      pong_timeout_seconds: 10
+      
+    # Message settings
+    message:
+      max_size_bytes: 1048576  # 1MB
+      compression: true
+      binary_mode: false
+      
+    # Security settings
+    security:
+      verify_ssl: true
+      client_cert_path: "/path/to/client.crt"  # optional
+      client_key_path: "/path/to/client.key"   # optional
+      
+  # Error handling
+  error_handling:
+    retry_failed_requests: true
+    max_retries: 3
+    retry_delay_ms: 1000
+    
+    # Custom error responses
+    custom_errors:
+      "502":
+        message: "Local server unavailable"
+        headers:
+          "Content-Type": "application/json"
+        body: '{"error": "Service temporarily unavailable"}'
+        
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    requests_per_second: 100
+    burst_size: 200
+    
+  # Monitoring
+  monitoring:
+    metrics_enabled: true
+    stats_interval_seconds: 60
+    health_check:
+      endpoint: "/health"
+      interval_seconds: 30
+```
 
-    fn extract_path_from_url(&self, url: &str) -> Result<String> {
-        if url.starts_with('/') {
-            // Already a path
-            Ok(url.to_string())
-        } else if let Ok(parsed_url) = url::Url::parse(url) {
-            // Full URL, extract path
-            let path = parsed_url.path();
-            let query = parsed_url.query().map(|q| format!("?{}", q)).unwrap_or_default();
-            Ok(format!("{}{}", path, query))
-        } else {
-            // Assume it's a relative path
-            Ok(format!("/{}", url.trim_start_matches('/')))
-        }
-    }
+## Local Server Requirements
 
-    pub async fn get_stats(&self) -> ProxyStats {
-        self.stats.read().await.clone()
-    }
-}
+### 1. HTTP Server Compatibility
 
-impl Clone for ProxyForwarder {
-    fn clone(&self) -> Self {
-        Self {
-            local_client: self.local_client.clone(), // This would need Clone impl for LocalServerClient
-            app_state: self.app_state.clone(),
-            stats: self.stats.clone(),
-        }
-    }
-}
+Your local server must support standard HTTP/1.1 or HTTP/2 protocols:
 
-// Public function to start proxy forwarder
-pub async fn run_proxy_forwarder(app_state: Arc<AppState>) -> Result<()> {
-    let local_url = app_state.settings.local_server.url.clone();
-    let timeout = app_state.settings.local_server.timeout;
-    let verify_ssl = app_state.settings.local_server.verify_ssl;
+#### Minimum Requirements
 
-    // Create local server client
-    let local_client = LocalServerClient::new(local_url, timeout, verify_ssl)
-        .context("Failed to create local server client")?;
+- **HTTP Methods**: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+- **Status Codes**: Standard HTTP status codes (200, 404, 500, etc.)
+- **Headers**: Accept and return standard HTTP headers
+- **Content Types**: Support for JSON, HTML, plain text, binary data
 
-    // Create forwarder
-    let forwarder = ProxyForwarder::new(local_client, app_state.clone());
+#### Recommended Features
 
-    // Get message receiver from app state
-    let message_rx = app_state.get_proxy_message_receiver(); // This method would need to be implemented
+- **Keep-Alive**: Support connection reuse for better performance
+- **Compression**: Support gzip/deflate compression
+- **Large Payloads**: Handle requests/responses up to 10MB
+- **Streaming**: Support chunked transfer encoding
 
-    // Start forwarding
-    forwarder.start(message_rx).await
+### 2. Health Check Endpoint
+
+Implement a health check endpoint for monitoring:
+
+```http
+GET /health HTTP/1.1
+Host: localhost:3000
+
+Response:
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "status": "healthy",
+  "timestamp": "2025-07-13T10:30:00Z",
+  "version": "1.0.0",
+  "uptime_seconds": 86400
 }
 ```
 
-## Response Handling and Streaming
+### 3. Error Handling
 
-### Efficient Response Processing
+Your local server should return appropriate HTTP status codes:
 
-```rust
-// src/proxy/response.rs
-use anyhow::{Result, Context};
-use bytes::Bytes;
-use futures_util::StreamExt;
-use reqwest::Response;
-use std::collections::HashMap;
-use tokio::io::AsyncRead;
-use tracing::{debug, warn};
+#### Success Responses
 
-pub struct ResponseHandler {
-    max_body_size: usize,
-    streaming_threshold: usize,
-}
+- **200 OK**: Successful request
+- **201 Created**: Resource created successfully
+- **204 No Content**: Successful request with no content
 
-impl ResponseHandler {
-    pub fn new(max_body_size: usize, streaming_threshold: usize) -> Self {
-        Self {
-            max_body_size,
-            streaming_threshold,
+#### Client Error Responses
+
+- **400 Bad Request**: Invalid request format
+- **401 Unauthorized**: Authentication required
+- **403 Forbidden**: Access denied
+- **404 Not Found**: Resource not found
+- **422 Unprocessable Entity**: Validation errors
+
+#### Server Error Responses
+
+- **500 Internal Server Error**: Server-side error
+- **502 Bad Gateway**: Upstream service error
+- **503 Service Unavailable**: Service temporarily down
+
+## Message Handling Details
+
+### 1. HTTP Request Processing
+
+When the proxy receives an HTTP request from the cloud:
+
+```json
+{
+  "step": "incoming_request",
+  "tunnel_message": {
+    "envelope": {
+      "tunnel_id": "tunnel_123",
+      "client_id": "client_456"
+    },
+    "message": {
+      "metadata": {
+        "id": "req_789",
+        "message_type": "http_request",
+        "timestamp": 1673532000000
+      },
+      "payload": {
+        "type": "Http",
+        "data": {
+          "type": "Request",
+          "method": "POST",
+          "url": "/api/users",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "Bearer token123"
+          },
+          "body": "eyJuYW1lIjoiSm9obiBEb2UifQ=="
         }
+      }
     }
-
-    pub async fn process_response(&self, response: Response) -> Result<ProcessedResponse> {
-        let status = response.status();
-        let headers = self.extract_headers(&response);
-        
-        // Check content length to decide on streaming vs buffering
-        let content_length = response.content_length();
-        let should_stream = content_length
-            .map(|len| len as usize > self.streaming_threshold)
-            .unwrap_or(false);
-
-        if should_stream {
-            debug!("Using streaming for large response ({:?} bytes)", content_length);
-            self.process_streaming_response(status.as_u16(), headers, response).await
-        } else {
-            debug!("Buffering small response");
-            self.process_buffered_response(status.as_u16(), headers, response).await
-        }
-    }
-
-    async fn process_buffered_response(
-        &self,
-        status: u16,
-        headers: HashMap<String, String>,
-        response: Response,
-    ) -> Result<ProcessedResponse> {
-        let body_bytes = response.bytes().await
-            .context("Failed to read response body")?;
-
-        if body_bytes.len() > self.max_body_size {
-            return Err(anyhow::anyhow!(
-                "Response body too large: {} bytes (max: {})",
-                body_bytes.len(),
-                self.max_body_size
-            ));
-        }
-
-        let body = if body_bytes.is_empty() {
-            None
-        } else {
-            Some(body_bytes.to_vec())
-        };
-
-        Ok(ProcessedResponse {
-            status,
-            headers,
-            body,
-            is_streaming: false,
-        })
-    }
-
-    async fn process_streaming_response(
-        &self,
-        status: u16,
-        headers: HashMap<String, String>,
-        response: Response,
-    ) -> Result<ProcessedResponse> {
-        let mut stream = response.bytes_stream();
-        let mut body_chunks = Vec::new();
-        let mut total_size = 0;
-
-        while let Some(chunk_result) = stream.next().await {
-            let chunk = chunk_result.context("Failed to read response chunk")?;
-            total_size += chunk.len();
-
-            if total_size > self.max_body_size {
-                return Err(anyhow::anyhow!(
-                    "Streamed response too large: {} bytes (max: {})",
-                    total_size,
-                    self.max_body_size
-                ));
-            }
-
-            body_chunks.push(chunk);
-        }
-
-        // Combine all chunks
-        let body = if body_chunks.is_empty() {
-            None
-        } else {
-            let mut combined = Vec::with_capacity(total_size);
-            for chunk in body_chunks {
-                combined.extend_from_slice(&chunk);
-            }
-            Some(combined)
-        };
-
-        Ok(ProcessedResponse {
-            status,
-            headers,
-            body,
-            is_streaming: true,
-        })
-    }
-
-    fn extract_headers(&self, response: &Response) -> HashMap<String, String> {
-        let mut headers = HashMap::new();
-        
-        for (key, value) in response.headers() {
-            if let Ok(value_str) = value.to_str() {
-                // Skip certain headers that shouldn't be forwarded
-                let key_lower = key.as_str().to_lowercase();
-                if !self.should_skip_response_header(&key_lower) {
-                    headers.insert(key.to_string(), value_str.to_string());
-                }
-            }
-        }
-
-        headers
-    }
-
-    fn should_skip_response_header(&self, header_name: &str) -> bool {
-        matches!(
-            header_name,
-            "connection" | "upgrade" | "proxy-connection" |
-            "transfer-encoding" | "te" | "trailers"
-        )
-    }
-}
-
-#[derive(Debug)]
-pub struct ProcessedResponse {
-    pub status: u16,
-    pub headers: HashMap<String, String>,
-    pub body: Option<Vec<u8>>,
-    pub is_streaming: bool,
-}
-
-impl ProcessedResponse {
-    pub fn body_size(&self) -> usize {
-        self.body.as_ref().map(|b| b.len()).unwrap_or(0)
-    }
-
-    pub fn has_body(&self) -> bool {
-        self.body.is_some()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_response_size_calculation() {
-        let response = ProcessedResponse {
-            status: 200,
-            headers: HashMap::new(),
-            body: Some(b"Hello, World!".to_vec()),
-            is_streaming: false,
-        };
-
-        assert_eq!(response.body_size(), 13);
-        assert!(response.has_body());
-    }
-
-    #[test]
-    fn test_empty_response() {
-        let response = ProcessedResponse {
-            status: 204,
-            headers: HashMap::new(),
-            body: None,
-            is_streaming: false,
-        };
-
-        assert_eq!(response.body_size(), 0);
-        assert!(!response.has_body());
-    }
+  }
 }
 ```
 
-## Connection Pooling Implementation
+The proxy transforms this into a local HTTP request:
 
-### HTTP Connection Pool
+```http
+POST /api/users HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+Authorization: Bearer token123
+X-Forwarded-By: pori-proxy
+X-Request-ID: req_789
 
-```rust
-// src/proxy/pool.rs
-use anyhow::Result;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, info, warn};
-use url::Url;
+{"name": "John Doe"}
+```
 
-pub struct ConnectionPool {
-    pools: Arc<RwLock<HashMap<String, Arc<Mutex<Pool>>>>>,
-    max_connections_per_host: usize,
-    idle_timeout: Duration,
-    connection_timeout: Duration,
-}
+### 2. HTTP Response Processing
 
-struct Pool {
-    connections: Vec<PooledConnection>,
-    created: usize,
-    max_size: usize,
-}
+When your local server responds:
 
-struct PooledConnection {
-    // This would contain the actual connection type
-    // For now, we'll use a placeholder
-    id: String,
-    created_at: Instant,
-    last_used: Instant,
-    is_busy: bool,
-}
+```http
+HTTP/1.1 201 Created
+Content-Type: application/json
+Location: /api/users/123
 
-impl ConnectionPool {
-    pub fn new(
-        max_connections_per_host: usize,
-        idle_timeout: Duration,
-        connection_timeout: Duration,
-    ) -> Self {
-        Self {
-            pools: Arc::new(RwLock::new(HashMap::new())),
-            max_connections_per_host,
-            idle_timeout,
-            connection_timeout,
+{"id": 123, "name": "John Doe", "created_at": "2025-07-13T10:30:00Z"}
+```
+
+The proxy converts this back to a tunnel message:
+
+```json
+{
+  "step": "outgoing_response",
+  "tunnel_message": {
+    "envelope": {
+      "tunnel_id": "tunnel_123",
+      "client_id": "client_456"
+    },
+    "message": {
+      "metadata": {
+        "id": "resp_790",
+        "correlation_id": "req_789",
+        "message_type": "http_response",
+        "timestamp": 1673532001000
+      },
+      "payload": {
+        "type": "Http",
+        "data": {
+          "type": "Response",
+          "status": 201,
+          "status_text": "Created",
+          "headers": {
+            "content-type": "application/json",
+            "location": "/api/users/123"
+          },
+          "body": "eyJpZCI6MTIzLCJuYW1lIjoiSm9obiBEb2UiLCJjcmVhdGVkX2F0IjoiMjAyNS0wNy0xM1QxMDozMDowMFoifQ=="
         }
+      }
     }
-
-    pub async fn get_connection(&self, url: &Url) -> Result<PooledConnection> {
-        let host_key = self.host_key(url);
-        
-        // Get or create pool for this host
-        let pool = {
-            let pools = self.pools.read().await;
-            pools.get(&host_key).cloned()
-        };
-
-        let pool = match pool {
-            Some(p) => p,
-            None => {
-                let mut pools = self.pools.write().await;
-                pools.entry(host_key.clone())
-                    .or_insert_with(|| Arc::new(Mutex::new(Pool::new(self.max_connections_per_host))))
-                    .clone()
-            }
-        };
-
-        // Get connection from pool
-        let mut pool_guard = pool.lock().await;
-        
-        // Try to find an idle connection
-        if let Some(conn) = pool_guard.get_idle_connection() {
-            debug!("Reusing pooled connection for {}", host_key);
-            return Ok(conn);
-        }
-
-        // Create new connection if pool not full
-        if pool_guard.can_create_connection() {
-            debug!("Creating new connection for {}", host_key);
-            let conn = pool_guard.create_connection(&host_key).await?;
-            return Ok(conn);
-        }
-
-        // Wait for connection to become available
-        debug!("Waiting for available connection for {}", host_key);
-        // Implementation would wait for a connection to become available
-        // For now, we'll return an error
-        Err(anyhow::anyhow!("No connections available for {}", host_key))
-    }
-
-    pub async fn return_connection(&self, url: &Url, connection: PooledConnection) {
-        let host_key = self.host_key(url);
-        
-        if let Some(pool) = self.pools.read().await.get(&host_key) {
-            let mut pool_guard = pool.lock().await;
-            pool_guard.return_connection(connection);
-        }
-    }
-
-    pub async fn cleanup_idle_connections(&self) {
-        let mut pools = self.pools.write().await;
-        let mut hosts_to_remove = Vec::new();
-
-        for (host, pool) in pools.iter() {
-            let mut pool_guard = pool.lock().await;
-            pool_guard.cleanup_idle(self.idle_timeout);
-            
-            if pool_guard.is_empty() {
-                hosts_to_remove.push(host.clone());
-            }
-        }
-
-        // Remove empty pools
-        for host in hosts_to_remove {
-            pools.remove(&host);
-            debug!("Removed empty connection pool for {}", host);
-        }
-    }
-
-    fn host_key(&self, url: &Url) -> String {
-        format!("{}://{}", url.scheme(), url.host_str().unwrap_or("unknown"))
-    }
-
-    pub async fn get_stats(&self) -> ConnectionPoolStats {
-        let pools = self.pools.read().await;
-        let mut stats = ConnectionPoolStats::default();
-
-        for pool in pools.values() {
-            let pool_guard = pool.lock().await;
-            stats.total_pools += 1;
-            stats.total_connections += pool_guard.connections.len();
-            stats.idle_connections += pool_guard.connections.iter()
-                .filter(|c| !c.is_busy)
-                .count();
-            stats.busy_connections += pool_guard.connections.iter()
-                .filter(|c| c.is_busy)
-                .count();
-        }
-
-        stats
-    }
-}
-
-impl Pool {
-    fn new(max_size: usize) -> Self {
-        Self {
-            connections: Vec::new(),
-            created: 0,
-            max_size,
-        }
-    }
-
-    fn get_idle_connection(&mut self) -> Option<PooledConnection> {
-        for conn in &mut self.connections {
-            if !conn.is_busy {
-                conn.is_busy = true;
-                conn.last_used = Instant::now();
-                return Some(conn.clone());
-            }
-        }
-        None
-    }
-
-    fn can_create_connection(&self) -> bool {
-        self.created < self.max_size
-    }
-
-    async fn create_connection(&mut self, host: &str) -> Result<PooledConnection> {
-        let conn = PooledConnection {
-            id: format!("{}_{}", host, self.created),
-            created_at: Instant::now(),
-            last_used: Instant::now(),
-            is_busy: true,
-        };
-
-        self.connections.push(conn.clone());
-        self.created += 1;
-
-        Ok(conn)
-    }
-
-    fn return_connection(&mut self, mut connection: PooledConnection) {
-        connection.is_busy = false;
-        connection.last_used = Instant::now();
-        
-        // Update the connection in the pool
-        for conn in &mut self.connections {
-            if conn.id == connection.id {
-                *conn = connection;
-                break;
-            }
-        }
-    }
-
-    fn cleanup_idle(&mut self, idle_timeout: Duration) {
-        let now = Instant::now();
-        self.connections.retain(|conn| {
-            if !conn.is_busy && now.duration_since(conn.last_used) > idle_timeout {
-                debug!("Removing idle connection: {}", conn.id);
-                false
-            } else {
-                true
-            }
-        });
-    }
-
-    fn is_empty(&self) -> bool {
-        self.connections.is_empty()
-    }
-}
-
-impl Clone for PooledConnection {
-    fn clone(&self) -> Self {
-        Self {
-            id: self.id.clone(),
-            created_at: self.created_at,
-            last_used: self.last_used,
-            is_busy: self.is_busy,
-        }
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct ConnectionPoolStats {
-    pub total_pools: usize,
-    pub total_connections: usize,
-    pub idle_connections: usize,
-    pub busy_connections: usize,
-}
-
-// Background task to clean up idle connections
-pub async fn start_cleanup_task(pool: Arc<ConnectionPool>) {
-    let mut interval = tokio::time::interval(Duration::from_secs(60));
-
-    loop {
-        interval.tick().await;
-        pool.cleanup_idle_connections().await;
-    }
+  }
 }
 ```
 
-## Integration with Application
+### 3. Error Handling
 
-### Module Integration
+If your local server returns an error:
 
-```rust
-// src/proxy/mod.rs
-pub mod forwarder;
-pub mod client;
-pub mod response;
-pub mod pool;
+```http
+HTTP/1.1 400 Bad Request
+Content-Type: application/json
 
-pub use forwarder::{ProxyForwarder, run_proxy_forwarder, ProxyStats};
-pub use client::{LocalServerClient, ProxyResponse};
-pub use response::{ResponseHandler, ProcessedResponse};
-pub use pool::{ConnectionPool, ConnectionPoolStats, start_cleanup_task};
+{"error": "Invalid user data", "details": "Name is required"}
+```
 
-use anyhow::Result;
-use std::sync::Arc;
-use crate::AppState;
+The proxy forwards this as:
 
-// Initialize proxy system
-pub async fn initialize_proxy(app_state: Arc<AppState>) -> Result<()> {
-    // Start proxy forwarder
-    let forwarder_task = tokio::spawn({
-        let state = app_state.clone();
-        async move {
-            if let Err(e) = run_proxy_forwarder(state).await {
-                tracing::error!("Proxy forwarder error: {}", e);
-            }
+```json
+{
+  "step": "error_response",
+  "tunnel_message": {
+    "envelope": {
+      "tunnel_id": "tunnel_123",
+      "client_id": "client_456"
+    },
+    "message": {
+      "metadata": {
+        "id": "err_791",
+        "correlation_id": "req_789",
+        "message_type": "http_response",
+        "timestamp": 1673532001000
+      },
+      "payload": {
+        "type": "Http",
+        "data": {
+          "type": "Response",
+          "status": 400,
+          "status_text": "Bad Request",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "eyJlcnJvciI6IkludmFsaWQgdXNlciBkYXRhIiwiZGV0YWlscyI6Ik5hbWUgaXMgcmVxdWlyZWQifQ=="
         }
-    });
-
-    // Start connection pool cleanup
-    let pool = Arc::new(ConnectionPool::new(
-        app_state.settings.local_server.max_connections,
-        std::time::Duration::from_secs(60),
-        app_state.settings.local_server.timeout,
-    ));
-
-    let cleanup_task = tokio::spawn({
-        let pool = pool.clone();
-        async move {
-            start_cleanup_task(pool).await;
-        }
-    });
-
-    // Wait for tasks (they should run indefinitely)
-    tokio::try_join!(
-        async { forwarder_task.await.map_err(|e| anyhow::anyhow!("Forwarder task error: {}", e)) },
-        async { cleanup_task.await.map_err(|e| anyhow::anyhow!("Cleanup task error: {}", e)) }
-    )?;
-
-    Ok(())
+      }
+    }
+  }
 }
 ```
 
-This HTTP Proxy Forwarder implementation provides:
+## Security Considerations
 
-1. **Efficient request forwarding** with connection pooling and reuse
-2. **Comprehensive error handling** with proper error responses
-3. **Response streaming** for large payloads to minimize memory usage
-4. **Connection management** with automatic cleanup of idle connections
-5. **SSL/TLS support** for HTTPS local servers with certificate options
-6. **Statistics tracking** for monitoring and debugging
-7. **Header filtering** to remove proxy-specific headers
-8. **Timeout management** to prevent hanging requests
-9. **Concurrent processing** to handle multiple requests simultaneously
-10. **Integration with WebSocket** for bidirectional communication
+### 1. Authentication & Authorization
 
-The forwarder is designed to be performant, reliable, and maintainable while handling the complexities of HTTP proxy operations.
+#### Token-Based Authentication
+```yaml
+websocket:
+  token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  token_refresh_interval: 3600  # Refresh every hour
+```
+
+#### Certificate-Based Authentication
+```yaml
+websocket:
+  security:
+    client_cert_path: "/etc/pori/client.crt"
+    client_key_path: "/etc/pori/client.key"
+    ca_cert_path: "/etc/pori/ca.crt"
+```
+
+### 2. Request Validation
+
+The proxy validates all incoming requests:
+
+- **Message Format**: Ensures proper JSON structure
+- **Required Fields**: Validates all required fields are present
+- **Data Types**: Checks field types match expected values
+- **Size Limits**: Enforces maximum message and payload sizes
+- **Rate Limits**: Prevents abuse with rate limiting
+
+### 3. Local Server Security
+
+Protect your local server:
+
+```yaml
+proxy:
+  local_server:
+    # Only allow proxy connections
+    allowed_hosts: ["127.0.0.1", "localhost"]
+    
+    # Add security headers
+    transform:
+      add_headers:
+        "X-Forwarded-For": "proxy"
+        "X-Real-IP": "127.0.0.1"
+```
+
+## Monitoring & Debugging
+
+### 1. Dashboard Access
+
+Access the dashboard at: `http://localhost:7616`
+
+Features:
+
+- **Real-time Statistics**: Request/response counts, error rates
+- **Connection Status**: WebSocket connection health
+- **Message Logs**: Recent message history
+- **Performance Metrics**: Response times, throughput
+
+### 2. Logging Configuration
+
+```yaml
+logging:
+  level: "debug"  # For troubleshooting
+  format: "json"
+  outputs:
+    - type: "console"
+    - type: "file"
+      path: "/var/log/pori/proxy.log"
+      rotation:
+        max_size_mb: 100
+        max_files: 10
+```
+
+### 3. Health Monitoring
+
+Monitor proxy health:
+
+```bash
+# Check proxy status
+curl http://localhost:7616/api/status
+
+# Check statistics
+curl http://localhost:7616/api/stats
+
+# Check recent errors
+curl http://localhost:7616/api/errors
+```
+
+## Troubleshooting
+
+### 1. Common Issues
+
+#### Connection Problems
+```text
+Problem: WebSocket connection fails
+Solutions:
+- Check internet connectivity
+- Verify WebSocket URL and token
+- Check firewall settings
+- Review SSL certificate configuration
+```
+
+#### Local Server Unreachable
+```text
+Problem: Cannot connect to local server
+Solutions:
+- Verify local server is running
+- Check host and port configuration
+- Test direct HTTP connection: curl http://localhost:3000
+- Review local server logs
+```
+
+#### High Error Rates
+```text
+Problem: Many 5xx errors
+Solutions:
+- Check local server health
+- Review local server logs
+- Increase timeout values
+- Monitor resource usage (CPU, memory)
+```
+
+### 2. Debug Mode
+
+Enable debug logging for detailed troubleshooting:
+
+```yaml
+logging:
+  level: "debug"
+  
+proxy:
+  debug:
+    log_requests: true
+    log_responses: true
+    log_websocket_frames: true
+```
+
+This will log all message details for debugging.
+
+### 3. Testing Configuration
+
+Test your configuration:
+
+```bash
+# Start proxy in test mode
+./pori --config pori.yml --test
+
+# Validate configuration
+./pori --config pori.yml --validate
+
+# Check connectivity
+./pori --config pori.yml --check-connection
+```
+
+## Performance Optimization
+
+### 1. Connection Pooling
+
+```yaml
+proxy:
+  local_server:
+    max_connections: 100
+    connection_pool:
+      idle_timeout: 30
+      max_lifetime: 300
+```
+
+### 2. Compression
+
+```yaml
+proxy:
+  websocket:
+    message:
+      compression: true
+      compression_level: 6  # 1-9, higher = better compression
+```
+
+### 3. Caching
+
+```yaml
+proxy:
+  cache:
+    enabled: true
+    ttl_seconds: 300
+    max_size_mb: 100
+    cache_headers: true
+```
+
+## Production Deployment
+
+### 1. Systemd Service
+
+Create `/etc/systemd/system/pori-proxy.service`:
+
+```ini
+[Unit]
+Description=Pori Proxy Server
+After=network.target
+
+[Service]
+Type=simple
+User=pori
+Group=pori
+ExecStart=/usr/local/bin/pori --config /etc/pori/pori.yml
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 2. Docker Deployment
+
+```dockerfile
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y ca-certificates
+COPY pori /usr/local/bin/
+COPY pori.yml /etc/pori/
+EXPOSE 7616
+CMD ["pori", "--config", "/etc/pori/pori.yml"]
+```
+
+### 3. Monitoring Integration
+
+```yaml
+monitoring:
+  prometheus:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+    
+  logging:
+    json_format: true
+    structured_logs: true
+```
+
+This guide provides everything needed to configure your server to be compatible with the Pori proxy forwarder. The proxy handles all the complex message translation between the cloud WebSocket protocol and standard HTTP for your local applications.

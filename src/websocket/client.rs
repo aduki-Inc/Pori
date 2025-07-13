@@ -7,8 +7,9 @@ use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 use tracing::{debug, error, info, instrument, warn};
 
-use super::{messages::TunnelMessage, reconnect::ReconnectManager, tunnel::TunnelHandler};
+use super::{reconnect::ReconnectManager, tunnel::TunnelHandler};
 use crate::{proxy_log, AppState, ConnectionStatus, DashboardEvent};
+use crate::protocol::tunnel::TunnelMessage;
 
 type WsStream = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
@@ -457,7 +458,7 @@ mod tests {
         let app_state = create_test_app_state();
         let client = WebSocketClient::new(app_state).unwrap();
 
-        let message = TunnelMessage::ping();
+        let message = TunnelMessage::ping("test-tunnel".to_string(), "test-client".to_string());
         client.send_message(message).await.unwrap();
 
         let stats = client.get_stats().await;

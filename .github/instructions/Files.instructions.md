@@ -2,12 +2,20 @@
 applyTo: "**"
 ---
 
-Your primary goal is to keep individual code files as short as possible, ideally focusing on a single class or a small set of related functions. Achieve this by following these principles:
+1. **Verify Project Structure:** Examine existing architecture before changing code. Follow established patterns.
 
-1. **Maximize Folder Depth:** Create subfolders extensively to categorize even small pieces of functionality. If a concept can be broken down, place it in its own subfolder or file.
+2. **Ask Questions:** When uncertain, ask for clarification. Never invent requirements or dependencies.
 
-2. **Strict Naming Conventions:** All folder and file names **must** be lowercase. Do not use hyphens (-), underscores (\_), camelCase, or dots (.) in folder or file names. Use short, descriptive names. For example, instead of `call_management_service.extension`, prefer `projectroot/services/call/management/logic.extension` or similar, depending on programming language conventions.
+3. **Keep Files Small:** Focus on single responsibility per file - one class or related function set.
 
-3. **One Feature, One Location (Ideally One File):** If a file exceeds a few hundred lines or handles multiple distinct responsibilities, break it down into smaller files within more specific subdirectories.
+4. **Create Deep Folder Hierarchies:** Use multiple nested folders to organize functionality.
 
-4. **Comprehensive Coverage:** This structure should anticipate all features. When you identify new, distinct functionality during development, create new files and subfolders following these principles.
+5. **Naming Rules:**
+
+- All folders and files: lowercase only
+- No hyphens, underscores, camelCase or dots in names
+- Example: use `services/call/management/logic.ext` not `call_management_service.ext`
+
+6. **Split Large Files:** Files exceeding 200-300 lines or with multiple responsibilities must be divided into smaller files in specific subdirectories.
+
+7. **Plan Ahead:** Create folder structures anticipating all functionality, including future features.

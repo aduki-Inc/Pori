@@ -7,12 +7,12 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use crate::{proxy_log, AppState};
-use messages::ProxyMessage;
+use messages::HttpMessage;
 
 /// Run the HTTP proxy forwarder component
 pub async fn run_proxy_forwarder(
     app_state: Arc<AppState>,
-    message_rx: mpsc::UnboundedReceiver<ProxyMessage>,
+    message_rx: mpsc::UnboundedReceiver<HttpMessage>,
 ) -> Result<()> {
     proxy_log!("Starting HTTP proxy forwarder");
 

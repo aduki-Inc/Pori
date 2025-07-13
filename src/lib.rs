@@ -1,5 +1,6 @@
 pub mod config;
 pub mod logging;
+pub mod protocol;
 pub mod proxy;
 pub mod server;
 pub mod utils;
@@ -11,13 +12,15 @@ use tokio::sync::{mpsc, RwLock};
 use tracing::{error, info};
 
 use config::settings::AppSettings;
+use protocol::http::HttpMessage;
+use protocol::tunnel::TunnelMessage;
 
 /// Shared application state
 pub struct AppState {
     pub settings: AppSettings,
     pub dashboard_tx: mpsc::UnboundedSender<DashboardEvent>,
-    pub proxy_tx: mpsc::UnboundedSender<proxy::messages::ProxyMessage>,
-    pub websocket_tx: mpsc::UnboundedSender<websocket::messages::TunnelMessage>,
+    pub proxy_tx: mpsc::UnboundedSender<HttpMessage>,
+    pub websocket_tx: mpsc::UnboundedSender<TunnelMessage>,
     pub stats: Arc<RwLock<AppStats>>,
 }
 
@@ -92,8 +95,8 @@ impl AppState {
 /// Channel receivers for component communication
 pub struct AppChannels {
     pub dashboard_rx: mpsc::UnboundedReceiver<DashboardEvent>,
-    pub proxy_rx: mpsc::UnboundedReceiver<proxy::messages::ProxyMessage>,
-    pub websocket_rx: mpsc::UnboundedReceiver<websocket::messages::TunnelMessage>,
+    pub proxy_rx: mpsc::UnboundedReceiver<HttpMessage>,
+    pub websocket_rx: mpsc::UnboundedReceiver<TunnelMessage>,
 }
 
 /// Initialize and run the application

@@ -280,11 +280,11 @@ impl AppSettings {
             serde_json::from_str(&content)
                 .with_context(|| format!("Failed to parse JSON config file: {path}"))
         } else if path.ends_with(".yml") || path.ends_with(".yaml") {
-            serde_yaml::from_str(&content)
+            serde_yml::from_str(&content)
                 .with_context(|| format!("Failed to parse YAML config file: {path}"))
         } else {
             // Try YAML first, then TOML, then JSON
-            serde_yaml::from_str(&content)
+            serde_yml::from_str(&content)
                 .or_else(|_| toml::from_str(&content))
                 .or_else(|_| serde_json::from_str(&content))
                 .with_context(|| {

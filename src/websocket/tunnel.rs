@@ -1,4 +1,6 @@
-use super::messages::TunnelMessage;
+use crate::protocol::tunnel::TunnelMessage;
+use crate::protocol::messages::{MessagePayload, HttpPayload, AuthPayload, ControlPayload, StatsPayload, ErrorCategory};
+use crate::protocol::http::HttpMessage;
 use crate::{utils::http::get_status_description, AppState, ConnectionStatus, DashboardEvent};
 use anyhow::Result;
 use serde_json::json;
@@ -9,149 +11,160 @@ use tracing::{debug, error, info, instrument, warn};
 /// Handle HTTP tunnel messages
 pub struct TunnelHandler {
     app_state: Arc<AppState>,
+    tunnel_id: String,
+    client_id: String,
 }
 
 impl TunnelHandler {
     pub fn new(app_state: Arc<AppState>) -> Self {
-        Self { app_state }
+        Self { 
+            app_state,
+            tunnel_id: "default-tunnel".to_string(),
+            client_id: "pori-client".to_string(),
+        }
     }
 
     /// Process incoming tunnel message from WebSocket
     #[instrument(skip(self, message))]
     pub async fn handle_message(&self, message: TunnelMessage) -> Result<Option<TunnelMessage>> {
-        match message {
-            TunnelMessage::Auth { .. } => {
-                // Client should not receive auth messages
-                warn!("Received an unexpected auth message");
-                Ok(None)
-            }
+        match &message.message.payload {
+            MessagePayload::Auth(auth_payload) => {
+                match auth_payload {
+                    AuthPayload::TokenAuth { .. } => {
+                        // Client should not receive auth messages
+                        warn!("Received an unexpected auth message");
+                        Ok(None)
+                    }
+                    AuthPayload::Success { session_id, .. } => {
+                        info!("Authentication successful, session ID: {}", session_id);
 
-            TunnelMessage::AuthSuccess { session_id } => {
-                info!("Authentication successful, session ID: {}", session_id);
+                        // Update connection status
+                        let _ = self
+                            .app_state
+                            .dashboard_tx
+                            .send(DashboardEvent::ConnectionStatus(
+                                ConnectionStatus::Connected,
+                            ));
 
-                // Update connection status
-                let _ = self
-                    .app_state
-                    .dashboard_tx
-                    .send(DashboardEvent::ConnectionStatus(
-                        ConnectionStatus::Connected,
-                    ));
+                        // Update stats
+                        self.app_state
+                            .update_stats(|stats| {
+                                stats.connection_status = "connected".to_string();
+                            })
+                            .await;
 
-                // Update stats
-                self.app_state
-                    .update_stats(|stats| {
-                        stats.connection_status = "connected".to_string();
-                    })
-                    .await;
+                        Ok(None)
+                    }
+                    AuthPayload::Failure { error_message, .. } => {
+                        error!("Authentication failed: {}", error_message);
 
-                Ok(None)
-            }
+                        // Update connection status
+                        let _ = self
+                            .app_state
+                            .dashboard_tx
+                            .send(DashboardEvent::ConnectionStatus(ConnectionStatus::Error(
+                                error_message.clone(),
+                            )));
 
-            TunnelMessage::AuthError { error } => {
-                error!("Authentication failed: {}", error);
-
-                // Update connection status
-                let _ = self
-                    .app_state
-                    .dashboard_tx
-                    .send(DashboardEvent::ConnectionStatus(ConnectionStatus::Error(
-                        error.clone(),
-                    )));
-
-                // Return error for a client to handle
-                Err(anyhow::anyhow!("Authentication failed: {}", error))
-            }
-
-            TunnelMessage::HttpRequest {
-                id,
-                method,
-                url,
-                headers,
-                body,
-            } => {
-                // Parse URL to extract path and query parameters
-                let (path, _query_params) = self.parse_url_components(&url);
-                let body_size = body.as_ref().map(|b| b.len()).unwrap_or(0);
-
-                // Also log in simple format for quick reading
-                crate::proxy_log!(
-                    "REQUEST [{}] {} {} (Body: {} bytes)",
-                    id,
-                    method,
-                    path,
-                    body_size
-                );
-
-                debug!("Request headers: {:?}", headers);
-
-                // Forward to a proxy component
-                let proxy_message = crate::proxy::messages::ProxyMessage::HttpRequest {
-                    id: id.clone(),
-                    method: method.clone(),
-                    url: url.clone(),
-                    headers: headers.clone(),
-                    body: body.clone(),
-                };
-
-                if let Err(e) = self.app_state.proxy_tx.send(proxy_message) {
-                    error!("Failed to forward an HTTP request to proxy: {}", e);
-
-                    // Log error response
-                    self.log_response(&id, 500, "Internal Server Error", "Internal proxy error");
-
-                    // Send error response
-                    return Ok(Some(TunnelMessage::error_for_request(
-                        id,
-                        "Internal proxy error".to_string(),
-                        Some(500),
-                    )));
+                        // Return error for a client to handle
+                        Err(anyhow::anyhow!("Authentication failed: {}", error_message))
+                    }
+                    _ => {
+                        warn!("Received unexpected auth payload type");
+                        Ok(None)
+                    }
                 }
-
-                // Notify dashboard
-                let _ = self
-                    .app_state
-                    .dashboard_tx
-                    .send(DashboardEvent::RequestForwarded(format!("{method} {path}")));
-
-                // Update stats
-                self.app_state
-                    .update_stats(|stats| {
-                        stats.requests_processed += 1;
-                    })
-                    .await;
-
-                crate::proxy_log!(
-                    "Request forwarded to local server: {} {} [{}]",
-                    method,
-                    path,
-                    id
-                );
-
-                Ok(None)
             }
 
-            TunnelMessage::HttpResponse { .. } => {
-                // Client should not receive HTTP responses
-                warn!("Received an unexpected HTTP response message");
-                Ok(None)
+            MessagePayload::Http(http_payload) => {
+                match http_payload {
+                    HttpPayload::Request { method, url, headers, body, .. } => {
+                        // Parse URL to extract path and query parameters
+                        let (path, _query_params) = self.parse_url_components(url);
+                        let body_size = body.as_ref().map(|b| b.len()).unwrap_or(0);
+                        let request_id = &message.message.metadata.id;
+
+                        // Also log in simple format for quick reading
+                        crate::proxy_log!(
+                            "REQUEST [{}] {} {} (Body: {} bytes)",
+                            request_id,
+                            method,
+                            path,
+                            body_size
+                        );
+
+                        debug!("Request headers: {:?}", headers);
+
+                        // Create HTTP message for proxy
+                        let http_message = HttpMessage::http_request(
+                            request_id.clone(),
+                            method.clone(),
+                            url.clone(),
+                            headers.clone(),
+                            body.clone(),
+                        );
+
+                        if let Err(e) = self.app_state.proxy_tx.send(http_message) {
+                            error!("Failed to forward an HTTP request to proxy: {}", e);
+
+                            // Log error response
+                            self.log_response(request_id, 500, "Internal Server Error", "Internal proxy error");
+
+                            // Send error response
+                            return Ok(Some(self.create_error_response(
+                                request_id.clone(),
+                                "Internal proxy error".to_string(),
+                                Some(500),
+                            )));
+                        }
+
+                        // Notify dashboard
+                        let _ = self
+                            .app_state
+                            .dashboard_tx
+                            .send(DashboardEvent::RequestForwarded(format!("{method} {path}")));
+
+                        // Update stats
+                        self.app_state
+                            .update_stats(|stats| {
+                                stats.requests_processed += 1;
+                            })
+                            .await;
+
+                        crate::proxy_log!(
+                            "Request forwarded to local server: {} {} [{}]",
+                            method,
+                            path,
+                            request_id
+                        );
+
+                        Ok(None)
+                    }
+                    HttpPayload::Response { .. } => {
+                        // Client should not receive HTTP responses
+                        warn!("Received an unexpected HTTP response message");
+                        Ok(None)
+                    }
+                    _ => {
+                        warn!("Received unexpected HTTP payload type");
+                        Ok(None)
+                    }
+                }
             }
 
-            TunnelMessage::Error {
-                request_id,
-                error,
-                code,
-            } => {
+            MessagePayload::Error(error_payload) => {
+                let request_id = error_payload.related_id.as_deref();
                 if let Some(req_id) = request_id {
-                    error!("Request {} failed: {} (code: {:?})", req_id, error, code);
+                    error!("Request {} failed: {}", req_id, error_payload.message);
                 } else {
-                    error!("General error: {} (code: {:?})", error, code);
+                    error!("General error: {}", error_payload.message);
                 }
 
                 // Notify dashboard
                 let _ = self
                     .app_state
                     .dashboard_tx
-                    .send(DashboardEvent::Error(error.clone()));
+                    .send(DashboardEvent::Error(error_payload.message.clone()));
 
                 // Update error stats
                 self.app_state
@@ -163,35 +176,53 @@ impl TunnelHandler {
                 Ok(None)
             }
 
-            TunnelMessage::Ping { timestamp: _ } => {
-                // Server doesn't expect ping messages, ignore them
-                debug!("Ignoring ping message - server doesn't support pings");
-                Ok(None)
+            MessagePayload::Control(control_payload) => {
+                match control_payload {
+                    ControlPayload::Ping { .. } => {
+                        // Server doesn't expect ping messages, ignore them
+                        debug!("Ignoring ping message - server doesn't support pings");
+                        Ok(None)
+                    }
+                    ControlPayload::Pong { .. } => {
+                        // Server doesn't expect pong messages, ignore them
+                        debug!("Ignoring pong message - server doesn't support pongs");
+                        Ok(None)
+                    }
+                    ControlPayload::Status { status, message, .. } => {
+                        info!("Server status: {:?} - {:?}", status, message);
+
+                        // Update connection status
+                        let _ = self
+                            .app_state
+                            .dashboard_tx
+                            .send(DashboardEvent::ConnectionStatus(
+                                ConnectionStatus::Connected,
+                            ));
+
+                        Ok(None)
+                    }
+                    _ => {
+                        debug!("Received control message: {:?}", control_payload);
+                        Ok(None)
+                    }
+                }
             }
 
-            TunnelMessage::Pong { timestamp: _ } => {
-                // Server doesn't expect pong messages, ignore them
-                debug!("Ignoring pong message - server doesn't support pongs");
-                Ok(None)
-            }
-
-            TunnelMessage::Stats { .. } => {
+            MessagePayload::Stats(_) => {
                 // Client should not receive stat messages
                 warn!("Received an unexpected stats message");
                 Ok(None)
             }
 
-            TunnelMessage::Status { status, message } => {
-                info!("Server status: {} - {:?}", status, message);
+            MessagePayload::Stream(_) => {
+                // Handle streaming data if needed
+                debug!("Received stream message");
+                Ok(None)
+            }
 
-                // Update connection status
-                let _ = self
-                    .app_state
-                    .dashboard_tx
-                    .send(DashboardEvent::ConnectionStatus(
-                        ConnectionStatus::Connected,
-                    ));
-
+            MessagePayload::Custom(_) => {
+                // Handle custom messages if needed
+                debug!("Received custom message");
                 Ok(None)
             }
         }
@@ -199,17 +230,29 @@ impl TunnelHandler {
 
     /// Create an authentication message for the initial connection
     pub fn create_auth_message(&self) -> TunnelMessage {
-        TunnelMessage::auth(self.app_state.settings.websocket.token.clone())
+        TunnelMessage::auth_token(
+            self.tunnel_id.clone(),
+            self.client_id.clone(),
+            self.app_state.settings.websocket.token.clone(),
+            "Bearer".to_string(),
+            vec!["tunnel".to_string()],
+        )
     }
 
     /// Create a statistics message
     pub async fn create_stats_message(&self) -> TunnelMessage {
         let stats = self.app_state.get_stats().await;
-        TunnelMessage::stats(
-            stats.requests_processed,
-            stats.bytes_forwarded,
-            stats.uptime_seconds,
-        )
+        let message = crate::protocol::messages::ProtocolMessage::new(
+            "stats".to_string(),
+            MessagePayload::Stats(StatsPayload::Traffic {
+                requests_processed: stats.requests_processed,
+                requests_successful: stats.requests_successful,
+                requests_failed: stats.requests_failed,
+                bytes_transferred: stats.bytes_forwarded,
+                average_response_time_ms: 0.0,
+            }),
+        );
+        TunnelMessage::new(self.tunnel_id.clone(), self.client_id.clone(), message)
     }
 
     /// Handle HTTP response from proxy to send back via WebSocket
@@ -238,7 +281,14 @@ impl TunnelHandler {
             })
             .await;
 
-        TunnelMessage::http_response(request_id, status, status_text, headers, body)
+        TunnelMessage::http_response(
+            self.tunnel_id.clone(),
+            self.client_id.clone(),
+            status,
+            status_text,
+            headers,
+            body,
+        )
     }
 
     /// Handle error from proxy to send back via WebSocket
@@ -263,7 +313,24 @@ impl TunnelHandler {
             })
             .await;
 
-        TunnelMessage::error_for_request(request_id, error, status_code)
+        self.create_error_response(request_id, error, status_code)
+    }
+
+    /// Create error response
+    fn create_error_response(
+        &self,
+        request_id: String,
+        error: String,
+        status_code: Option<u16>,
+    ) -> TunnelMessage {
+        TunnelMessage::error(
+            self.tunnel_id.clone(),
+            self.client_id.clone(),
+            status_code.map(|c| c.to_string()).unwrap_or_else(|| "UNKNOWN".to_string()),
+            error,
+            ErrorCategory::Internal,
+            Some(request_id),
+        )
     }
 
     /// Validate incoming HTTP request
@@ -440,19 +507,14 @@ mod tests {
         let app_state = create_test_app_state();
         let handler = TunnelHandler::new(app_state);
 
-        let ping_message = TunnelMessage::ping();
-        if let TunnelMessage::Ping { timestamp } = ping_message {
-            let response = handler
-                .handle_message(TunnelMessage::Ping { timestamp })
-                .await
-                .unwrap();
+        let ping_message = TunnelMessage::ping("tunnel-1".to_string(), "client-1".to_string());
+        let response = handler.handle_message(ping_message).await.unwrap();
 
-            // Ping messages are now ignored (no response expected)
-            assert!(response.is_none());
-        }
+        // Ping messages are now ignored (no response expected)
+        assert!(response.is_none());
 
         // Test pong handling too
-        let pong_message = TunnelMessage::pong(123456);
+        let pong_message = TunnelMessage::pong("tunnel-1".to_string(), "client-1".to_string(), 123456);
         let response = handler.handle_message(pong_message).await.unwrap();
 
         // Pong messages are also ignored (no response expected)
