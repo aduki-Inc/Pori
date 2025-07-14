@@ -62,6 +62,7 @@ pub struct LoggingSettings {
     pub level: String,
     pub format: LogFormat,
     pub enable_color: bool,
+    pub show_context: bool, // default: false
 }
 
 /// Log output format
@@ -115,6 +116,7 @@ pub struct LoggingConfig {
     pub level: Option<String>,
     pub format: Option<String>,
     pub enable_color: Option<bool>,
+    pub show_context: Option<bool>, // default: None
 }
 
 impl AppSettings {
@@ -285,6 +287,11 @@ impl AppSettings {
                     .as_ref()
                     .and_then(|l| l.enable_color)
                     .unwrap_or(true),
+                show_context: config_file
+                    .logging
+                    .as_ref()
+                    .and_then(|l| l.show_context)
+                    .unwrap_or(false),
             },
             no_dashboard: cli.no_dashboard,
         })

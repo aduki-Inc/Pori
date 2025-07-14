@@ -18,7 +18,9 @@ impl FormatTime for HumanTime {
 }
 
 /// Custom event formatter that replaces INFO with PROXY/LOCAL when appropriate
-pub struct CustomFormatter;
+pub struct CustomFormatter {
+    pub show_context: bool,
+}
 
 impl<S, N> FormatEvent<S, N> for CustomFormatter
 where
@@ -84,11 +86,13 @@ where
 
         write!(writer, ": ")?;
 
-        // Write span context
-        ctx.visit_spans(|span| {
-            write!(writer, "{}: ", span.name()).unwrap();
-            Ok(())
-        })?;
+        // Conditionally write span context based on config
+        if self.show_context {
+            ctx.visit_spans(|span| {
+                write!(writer, "{}: ", span.name()).unwrap();
+                Ok(())
+            })?;
+        }
 
         // Write the actual message
         ctx.field_format().format_fields(writer.by_ref(), event)?;
@@ -99,7 +103,7 @@ where
 }
 
 /// Initialize logging system
-pub fn init(log_level: &str) -> Result<()> {
+pub fn init_with_context(log_level: &str, show_context: bool) -> Result<()> {
     // Parse log level
     let level = parse_log_level(log_level)?;
 
@@ -112,11 +116,10 @@ pub fn init(log_level: &str) -> Result<()> {
         Level::ERROR => EnvFilter::new("pori=error,PROXY=error,LOCAL=error,tower=warn,hyper=warn"),
     });
 
-    // Set up tracing subscriber with a custom formatter
     tracing_subscriber::registry()
         .with(
             fmt::layer()
-                .event_format(CustomFormatter)
+                .event_format(CustomFormatter { show_context })
                 .with_ansi(atty::is(atty::Stream::Stdout)),
         )
         .with(env_filter)

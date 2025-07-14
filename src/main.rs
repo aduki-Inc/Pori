@@ -12,29 +12,23 @@ async fn main() -> Result<()> {
     // Validate arguments
     cli_args.validate()?;
 
-    // Initialize logging
-    logging::init(&cli_args.log_level)?;
+    // Create application settings from CLI arguments
+    let settings = AppSettings::from_cli(cli_args)?;
+
+    // Initialize logging with show_context from settings
+    logging::init_with_context(&settings.logging.level, settings.logging.show_context)?;
 
     // Print startup banner
     println!("Starting Pori v{}", env!("CARGO_PKG_VERSION"));
     info!("Starting pori application");
-    if let Some(ref url) = cli_args.url {
-        info!("WebSocket URL: {}", url);
+    info!("WebSocket URL: {}", settings.websocket.url);
+    info!("Local server: {}", settings.local_server.url);
+    if !settings.no_dashboard {
+        info!("Dashboard server: {}", settings.dashboard_url());
     }
-    info!(
-        "Local server: {}://localhost:{}",
-        cli_args.protocol, cli_args.port
-    );
-    if !cli_args.no_dashboard {
-        info!(
-            "Dashboard server: http://localhost:{}",
-            cli_args.dashboard_port
-        );
-    }
-    info!("Log level: {}", cli_args.log_level);
+    info!("Log level: {}", settings.logging.level);
 
-    // Create application settings from CLI arguments
-    let settings = AppSettings::from_cli(cli_args)?;
+    // ...existing code...
 
     // Run application
     run_application(settings).await?;
